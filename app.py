@@ -9,6 +9,7 @@ from cache_manager import (
     check_phytomed_rules,
     check_class_rules, 
     check_multidrug_synergies,
+    get_all_atc_codes,
     save_to_cache, 
     get_total_cached_count, 
     get_total_class_rules_count, 
@@ -113,19 +114,20 @@ st.markdown("""
         font-size: 0.90rem;
         color: #166534;
     }
+    .monitoring-card {
+        background-color: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-left: 6px solid #0284c7;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+    }
     .synergy-card {
         background-color: #fff1f2;
         border: 1px solid #fecdd3;
         border-left: 6px solid #e11d48;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 16px;
-    }
-    .form-panel {
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 12px 16px;
         margin-bottom: 16px;
     }
     .disclaimer-banner {
@@ -184,18 +186,60 @@ def get_practical_advice(effect_text, mechanism_text, system_name):
     """Generiert praxisnahe Handlungsempfehlungen basierend auf dem Wirkmechanismus."""
     comb_text = f"{effect_text} {mechanism_text} {system_name}".lower()
     
-    if "chelat" in comb_text or "calcium" in comb_text or "resorption" in comb_text:
+    if "chelat" in comb_text or "calcium" in comb_text or "resorption" in comb_text or "eisen" in comb_text or "magnesium" in comb_text:
         return "⏰ Einnahme-Tipp: Mindestens 2 bis 3 Stunden zeitlichen Abstand zwischen den Mahlzeiten/Mineralstoffen und der Medikamenteneinnahme einhalten."
     if "cyp3a4" in comb_text and ("grapefruit" in comb_text or "hypericum" in comb_text or "johanniskraut" in comb_text):
         return "⚠️ Wichtiger Hinweis: Grapefruit/Johanniskraut waehrend der gesamten Dauer der medikamentoesen Therapie vollstaendig meiden."
     if "blutung" in comb_text or "haemostase" in comb_text:
         return "🩸 Vorsichtsmassnahme: Auf vermehrte Blutungszeichen (Zahnfleischbluten, Haematome, dunklen Stuhl) achten und vor operativen Eingriffen aerztlich absprechen."
-    if "hypokaliaemie" in comb_text or "kalium" in comb_text or "diureti" in comb_text:
-        return "🧪 Monitoring: Regelmaessige elektrolytische Laborkontrolle (insbesondere Serum-Kalium) durch den behandelnden Arzt empfohlen."
+    if "hypokaliaemie" in comb_text or "hyperkaliaemie" in comb_text or "kalium" in comb_text or "diureti" in comb_text:
+        return "🧪 Monitoring: Regelmaessige elektrolytische Laborkontrolle (insbesondere Serum-Kalium und Kreatinin) durch den behandelnden Arzt empfohlen."
     if "qt" in comb_text or "torsade" in comb_text:
         return "🫀 Kardiologischer Hinweis: Ein Kontroll-EKG zur Bestimmung der QTc-Zeit sollte aerztlich evaluiert werden."
     
     return None
+
+
+def get_aggregated_monitoring(selected_drugs, detected_interactions, synergies):
+    """
+    Aggregiert die notwendigen aerztlichen Kontrollparameter ueber alle
+    gewaehlten Substanzen und erkannten Risikokonstellationen hinweg.
+    """
+    params = set()
+    all_codes = []
+    for d in selected_drugs:
+        all_codes.extend(get_all_atc_codes(d))
+
+    combined_text = " ".join([f"{item.get('effect', '')} {item.get('mechanism', '')} {item.get('system', '')}" for item in detected_interactions]).lower()
+    for syn in synergies:
+        combined_text += f" {syn.get('effect', '')} {syn.get('mechanism', '')}"
+
+    # 1. Nierenfunktion & Elektrolyte
+    if (any(c.startswith("C09") or c.startswith("C03") or c.startswith("M01A") for c in all_codes) or 
+        "kalium" in combined_text or "niere" in combined_text or "whammy" in combined_text or "hyperkaliaemie" in combined_text or "hypokaliaemie" in combined_text):
+        params.add("Nierenwerte & Elektrolyte: Serum-Kalium, Serum-Natrium, Kreatinin und eGFR")
+
+    # 2. Kardiales EKG / QTc
+    if any(syn.get("type") == "Kardiale QT-Verlaengerung" for syn in synergies) or "qt" in combined_text or "torsade" in combined_text or any(c.startswith("C01B") for c in all_codes):
+        params.add("Kardiologische Diagnostik: 12-Kanal-Ruhe-EKG (Messung der frequenzkorrigierten QTc-Zeit)")
+
+    # 3. Blutgerinnung & Blutbild
+    if any(c.startswith("B01") for c in all_codes) or "blutung" in combined_text or "haemostase" in combined_text:
+        params.add("Haemostase & Haematologie: Kleines Blutbild (Hb, Thrombozytenzahl), ggf. Gerinnungsstatus (INR/Quick)")
+
+    # 4. Leberfunktion / Enzyme
+    if "statin" in combined_text or "rhabdomyolyse" in combined_text or any(c.startswith("C10AA") for c in all_codes) or "cyp3a4" in combined_text:
+        params.add("Hepatische Parameter & Muskelenzyme: ALAT (GPT), ASAT (GOT), Creatin-Kinase (CK bei Myalgien)")
+
+    # 5. Schilddruesenfunktion
+    if any(c.startswith("H03AA") for c in all_codes) and ("chelat" in combined_text or "resorption" in combined_text or any(c in ["PHYTO_IRON", "PHYTO_CALCIUM"] for c in all_codes)):
+        params.add("Endokrines Monitoring: TSH-Basalwert und freies T4 (fT4) zur Resorptionskontrolle")
+
+    # 6. Digitalisspiegel
+    if any(c.startswith("C01AA") for c in all_codes) and ("digitalis" in combined_text or "digoxin" in combined_text or "p-gp" in combined_text):
+        params.add("Therapeutisches Drug Monitoring (TDM): Serum-Digoxin-Talspiegel (Serumkonzentration)")
+
+    return sorted(list(params))
 
 
 @st.cache_data(ttl=3600)
@@ -269,8 +313,8 @@ def find_interaction_smart(drug_a, drug_b):
     return None
 
 
-def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies):
-    """Erzeugt einen sauberen PDF-Report inklusive Dosisangaben und Handlungsempfehlungen."""
+def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies, monitoring_params):
+    """Erzeugt einen sauberen PDF-Report inklusive Monitoring-Parametern."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -332,13 +376,24 @@ def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies):
                 pdf.set_text_color(20, 20, 20)
             pdf.ln(2)
             
-    pdf.ln(3)
+    if monitoring_params:
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(2, 132, 199)
+        pdf.cell(width, 8, clean_text_for_pdf("3. Empfohlene Laborkontrollen & Diagnostik:"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", size=9)
+        pdf.set_text_color(20, 20, 20)
+        for param in monitoring_params:
+            pdf.multi_cell(width, 5, clean_text_for_pdf(f"* {param}"), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+    pdf.ln(2)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, clean_text_for_pdf("3. Leitfragen fuer das Arztgespraech:"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("4. Leitfragen fuer das Arztgespraech:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=9)
     fragen_text = (
         "- 'Gibt es fuer die verordneten Praeparate schonendere Alternativen?'\n"
-        "- 'Sollten relevante Laborwerte (z. B. Kreatinin/GFR, Kalium, Leberwerte, EKG/QT-Intervall) kontrolliert werden?'\n"
+        "- 'Sollten die oben aufgefuehrten Laborwerte (z. B. Elektrolyte, Nierenfunktion, EKG) kontrolliert werden?'\n"
         "- 'Koennen Einnahmezeitpunkte oder Abstaende angepasst werden (z. B. bei Chelatbildnern wie Milch/Mineralstoffen)?'"
     )
     pdf.multi_cell(width, 5, clean_text_for_pdf(fragen_text), new_x="LMARGIN", new_y="NEXT")
@@ -375,7 +430,7 @@ selected_drugs = st.multiselect(
     label="Wählen oder suchen Sie Wirkstoffe, Phytopharmaka oder Lebensmittel:",
     options=all_available_options,
     default=valid_defaults,
-    placeholder="Buchstaben eingeben (z. B. 'Diclofenac', 'Ramipril', 'Grapefruit', 'Ciprofloxacin')...",
+    placeholder="Buchstaben eingeben (z. B. 'Ramipril', 'Spironolactone', 'Morphine', 'Eisenpraeparate')...",
     help="Durchsucht in Echtzeit den gesamten Arzneimittel-Index sowie relevante Phytopharmaka und Nahrungsmittel."
 )
 
@@ -432,15 +487,13 @@ if len(selected_drugs) >= 2:
             result = find_interaction_smart(drug_a, drug_b)
             if result:
                 item_copy = dict(result)
-                # Dosis-/Darreichungs-Modulation
                 setting_a = drug_settings.get(drug_a, "")
                 setting_b = drug_settings.get(drug_b, "")
                 
-                # Wenn einer der Partner rein topisch angewendet wird:
                 if "Topisch" in setting_a or "Topisch" in setting_b:
                     if item_copy["severity"] == "Hoch" and any(sys_kw in item_copy.get("system", "").lower() for sys_kw in ["niere", "magen", "kreislauf"]):
                         item_copy["severity"] = "Moderat"
-                        item_copy["effect"] = f"[Lokale Anwendung gewählt] {item_copy['effect']} Durch die topische Anwendung (z. B. Gel) ist die systemische Aufnahme stark reduziert (~6%), wodurch das Organrisiko klinisch minimiert wird."
+                        item_copy["effect"] = f"[Lokale Anwendung gewählt] {item_copy['effect']} Durch die topische Anwendung ist die systemische Resorption minimal (~6%), was das Organrisiko klinisch senkt."
                 
                 detected_interactions.append({
                     "pair": (drug_a, drug_b),
@@ -453,7 +506,6 @@ normalized_drugs = [translate_to_inn(d) for d in selected_drugs]
 has_raas = any(d in normalized_drugs for d in ["ramipril", "candesartan", "enalapril", "valsartan", "lisinopril"])
 has_diuretic = any(d in normalized_drugs for d in ["hydrochlorothiazide", "torsemide", "furosemide", "spironolactone"])
 
-# Triple Whammy nur dann voll aktiv, wenn das NSAR systemisch eingenommen wird
 has_systemic_nsar = False
 for d in selected_drugs:
     inn = translate_to_inn(d)
@@ -529,8 +581,23 @@ for syn in multidrug_synergies:
     </div>
     """, unsafe_allow_html=True)
 
+# ----------------- Labor- & Diagnostik-Ampel -----------------
+monitoring_list = get_aggregated_monitoring(selected_drugs, detected_interactions, multidrug_synergies)
+if monitoring_list:
+    st.markdown(f"""
+    <div class="monitoring-card">
+        <h4 style="margin: 0 0 8px 0; color: #0369a1;">🔬 Empfohlene Laborkontrollen & Diagnostik für das Arztgespräch</h4>
+        <p style="margin: 0 0 10px 0; font-size: 0.88rem; color: #0c4a6e;">
+            Auf Basis der ausgewählten Medikation und Organrisiken sollten folgende Parameter ärztlich kontrolliert werden:
+        </p>
+        <ul style="margin: 0; padding-left: 20px; color: #1e293b; font-size: 0.92rem;">
+            {''.join([f'<li style="margin-bottom: 4px;">{p}</li>' for p in monitoring_list])}
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
 if len(selected_drugs) >= 2:
-    pdf_bytes = create_pdf_report(selected_drugs, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies)
+    pdf_bytes = create_pdf_report(selected_drugs, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list)
     st.download_button(
         label="📄 Gesprächsleitfaden für das nächste Arztgespräch als PDF herunterladen",
         data=pdf_bytes,
