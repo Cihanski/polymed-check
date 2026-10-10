@@ -144,24 +144,39 @@ st.markdown("""
 
 
 def clean_text_for_pdf(text):
-    """Entfernt Emojis und nicht-Latin-1 Zeichen fuer FPDF."""
+    """
+    Entfernt Emojis, Sonderzeichen und codiert Text absolut sicher fuer den FPDF Latin-1 Zeichensatz.
+    """
     if not text:
         return ""
-    emoji_pattern = re.compile("[\U00010000-\U0010ffff]", flags=re.UNICODE)
-    cleaned = emoji_pattern.sub("", text)
-    cleaned = (cleaned.replace("–", "-")
-                      .replace("—", "-")
-                      .replace("’", "'")
-                      .replace("“", '"')
-                      .replace("”", '"')
-                      .replace("ä", "ae")
-                      .replace("ö", "oe")
-                      .replace("ü", "ue")
-                      .replace("Ä", "Ae")
-                      .replace("Ö", "Oe")
-                      .replace("Ü", "Ue")
-                      .replace("ß", "ss"))
-    return cleaned.strip()
+    
+    # 1. Deutsche Umlaute & Gaengige typografische Sonderzeichen ersetzen
+    replacements = {
+        "ä": "ae", "ö": "oe", "ü": "ue",
+        "Ä": "Ae", "Ö": "Oe", "Ü": "Ue",
+        "ß": "ss",
+        "–": "-", "—": "-",
+        "’": "'", "‘": "'",
+        "“": '"', "”": '"',
+        "•": "-", "…": "..."
+    }
+    cleaned = text
+    for original, repl in replacements.items():
+        cleaned = cleaned.replace(original, repl)
+
+    # 2. Alle Emojis und Unicode-Symbole (auch 16-Bit Symbole wie ⏰, ⚡, ⚠️, 🩸, 🫀) entfernen
+    cleaned_chars = []
+    for char in cleaned:
+        # Erlaube nur druckbare ASCII-Zeichen und Basis-Latin-1
+        code = ord(char)
+        if 32 <= code <= 126 or 160 <= code <= 255 or code == 10:
+            cleaned_chars.append(char)
+        else:
+            cleaned_chars.append(" ")
+            
+    res = "".join(cleaned_chars)
+    # Mehrfache Leerzeichen zusammenfassen
+    return re.sub(r' +', ' ', res).strip()
 
 
 def get_practical_advice(effect_text, mechanism_text, system_name):
@@ -434,7 +449,7 @@ with col3:
     """, unsafe_allow_html=True)
 
 if is_triple_whammy:
-    st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + NSAR-Schmerzmittel drosseln die Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
+    st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + NSAR-Schmerkzmittel drosseln die Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
 
 for syn in multidrug_synergies:
     st.markdown(f"""
