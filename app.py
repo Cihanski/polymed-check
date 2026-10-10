@@ -1,10 +1,12 @@
 import streamlit as st
 import requests
+import re
 from itertools import combinations
 from fpdf import FPDF
 from datetime import datetime
 from cache_manager import (
     check_cache, 
+    check_phytomed_rules,
     check_class_rules, 
     check_multidrug_synergies,
     save_to_cache, 
@@ -14,7 +16,6 @@ from cache_manager import (
 )
 from drug_translator import translate_to_inn, get_autocomplete_catalog
 
-# --- 1. Seitenkonfiguration & Custom Styling ---
 st.set_page_config(
     page_title="MediCheck – Weltweiter Medikations- & Interaktions-Check",
     page_icon="💊",
@@ -76,6 +77,11 @@ st.markdown("""
         color: #3730a3;
         border: 1px solid #c7d2fe;
     }
+    .badge-phyto {
+        background-color: #dcfce7;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
     .badge-fda {
         background-color: #ecfdf5;
         color: #065f46;
@@ -127,8 +133,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. Live-Abfrage an openFDA ---
+
+def clean_text_for_pdf(text):
+    """
+    Entfernt Emojis und nicht-druckbare Latin-1 Zeichen,
+    damit FPDF ohne Encoding-Fehler generieren kann.
+    """
+    if not text:
+        return ""
+    # Emojis & Piktogramme filtern
+    emoji_pattern = re.compile("[\U00010000-\U0010ffff]", flags=re.UNICODE)
+    cleaned = emoji_pattern.sub("", text)
+    # Ersetze typische Sonderzeichen, die Latin-1 stören könnten
+    cleaned = cleaned.replace("–", "-").replace("—", "-").replace("’", "'").replace("“", '"').replace("”", '"')
+    return cleaned.strip()
+
+
 def fetch_fda_interaction(drug_a, drug_b):
+    """Fallback: Fragt bei Bedarf die openFDA drug label API an."""
     inn_a = translate_to_inn(drug_a)
     inn_b = translate_to_inn(drug_b)
     
@@ -167,11 +189,16 @@ def fetch_fda_interaction(drug_a, drug_b):
 
     return None
 
+
 def find_interaction_smart(drug_a, drug_b):
-    """3-Stufen-Prüfkaskade."""
+    """4-Stufen-Prüfkaskade: Cache -> Phyto/Nahrung -> ATC-Klassen -> openFDA."""
     cached = check_cache(drug_a, drug_b)
     if cached:
         return cached
+
+    phyto_match = check_phytomed_rules(drug_a, drug_b)
+    if phyto_match:
+        return phyto_match
 
     class_match = check_class_rules(drug_a, drug_b)
     if class_match:
@@ -184,89 +211,90 @@ def find_interaction_smart(drug_a, drug_b):
 
     return None
 
-# --- 3. PDF-Generierungsfunktion ---
+
 def create_pdf_report(drugs, interactions, is_triple, synergies):
+    """Erzeugt einen sauberen PDF-Report (bereinigt um Emojis)."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     width = pdf.epw
     
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(width, 10, "MediCheck - Medikations- & Gespraechsleitfaden", new_x="LMARGIN", new_y="NEXT", align="L")
+    pdf.cell(width, 10, clean_text_for_pdf("MediCheck - Medikations- & Gespraechsleitfaden"), new_x="LMARGIN", new_y="NEXT", align="L")
     pdf.set_font("Helvetica", size=9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(width, 6, f"Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')} | Zur Vorbereitung auf das Arztgespraech", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 6, clean_text_for_pdf(f"Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')} | Zur Vorbereitung auf das Arztgespraech"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(20, 20, 20)
-    pdf.cell(width, 8, "1. Erfasste Praeparate & Wirkstoffe:", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate, Phytopharmaka & Nahrungsmittel:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=10)
     for d in drugs:
         inn = translate_to_inn(d)
-        inn_info = f" [Wirkstoff: {inn.capitalize()}]" if inn.lower() != d.lower() else ""
-        pdf.cell(width, 6, f"- {d}{inn_info}", new_x="LMARGIN", new_y="NEXT")
+        inn_info = f" [Wirkstoff: {inn.capitalize()}]" if inn.lower() != d.lower() and not d.startswith("PHYTO_") else ""
+        pdf.cell(width, 6, clean_text_for_pdf(f"- {d}{inn_info}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     
     if is_triple or synergies:
         pdf.set_fill_color(254, 226, 226)
         pdf.set_text_color(153, 27, 27)
         pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(width, 8, " WARNUNG: Kumulative Mehrfach-Risiken (Multi-Drug Synergien):", fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(width, 8, clean_text_for_pdf(" WARNUNG: Kumulative Mehrfach-Risiken (Multi-Drug Synergien):"), fill=True, new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=9)
         
         if is_triple:
-            pdf.multi_cell(width, 5, "- Triple-Whammy-Kombination: Renale Dekompensation durch RAAS-Hemmer + Diuretikum + NSAR.", fill=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(width, 5, clean_text_for_pdf("- Triple-Whammy-Kombination: Renale Dekompensation durch RAAS-Hemmer + Diuretikum + NSAR."), fill=True, new_x="LMARGIN", new_y="NEXT")
         
         for syn in synergies:
-            pdf.multi_cell(width, 5, f"- {syn['title']}: {syn['effect']}", fill=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(width, 5, clean_text_for_pdf(f"- {syn['title']}: {syn['effect']}"), fill=True, new_x="LMARGIN", new_y="NEXT")
         
         pdf.ln(4)
         pdf.set_text_color(20, 20, 20)
     
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, f"2. Gefundene Einzelpaar-Wechselwirkungen ({len(interactions)} Befunde):", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf(f"2. Gefundene Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
     
     if len(interactions) == 0:
         pdf.set_font("Helvetica", size=10)
-        pdf.cell(width, 6, "In den hinterlegten Referenzdatenbanken sind keine kritischen Konflikte dokumentiert.", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(width, 6, clean_text_for_pdf("In den hinterlegten Referenzdatenbanken sind keine kritischen Konflikte dokumentiert."), new_x="LMARGIN", new_y="NEXT")
     else:
         for idx, item in enumerate(interactions, start=1):
             d1, d2 = item["pair"]
             pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(width, 6, f"{idx}. {d1} + {d2} [Risiko: {item['severity']} | {item['system']}]", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(width, 6, clean_text_for_pdf(f"{idx}. {d1} + {d2} [Risiko: {item['severity']} | {item['system']}]"), new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", size=9)
-            pdf.multi_cell(width, 5, f"Effekt: {item['effect']}", new_x="LMARGIN", new_y="NEXT")
-            pdf.multi_cell(width, 5, f"Details: {item['mechanism']}", new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(width, 5, clean_text_for_pdf(f"Effekt: {item['effect']}"), new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(width, 5, clean_text_for_pdf(f"Details: {item['mechanism']}"), new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
             
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, "3. Leitfragen fuer das Arztgespraech:", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("3. Leitfragen fuer das Arztgespraech:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=9)
     fragen_text = (
-        "- 'Gibt es fuer die verordneten Praeparate schonendere Alternativen fuer mich?'\n"
-        "- 'Sollten relevante Laborparameter (z. B. Kreatinin/GFR, Kalium, EKG/QT-Intervall) kontrolliert werden?'\n"
-        "- 'Koennen die Einnahmezeitpunkte angepasst werden, um Wechselwirkungen zu minimieren?'"
+        "- 'Gibt es fuer die verordneten Praeparate schonendere Alternativen?'\n"
+        "- 'Sollten relevante Laborwerte (z. B. Kreatinin/GFR, Kalium, Leberwerte, EKG/QT-Intervall) kontrolliert werden?'\n"
+        "- 'Koennen Einnahmezeitpunkte oder Abstaende angepasst werden (z. B. bei Chelatbildnern wie Milch/Mineralstoffen)?'"
     )
-    pdf.multi_cell(width, 5, fragen_text, new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(width, 5, clean_text_for_pdf(fragen_text), new_x="LMARGIN", new_y="NEXT")
     
     pdf.ln(4)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(width, 4, "Haftungsausschluss: Dieses Dokument dient ausschliesslich zur Gespraechsvorbereitung. Es stellt keine Therapieempfehlung dar. Medikamente niemals eigenmaechtig absetzen.", new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(width, 4, clean_text_for_pdf("Haftungsausschluss: Dieses Dokument dient ausschliesslich zur Gespraechsvorbereitung. Es stellt keine Therapieempfehlung dar. Medikamente niemals eigenmaechtig absetzen."), new_x="LMARGIN", new_y="NEXT")
     
     return bytes(pdf.output())
 
-# --- 4. App-Header & Disclaimer-Banner ---
+
 total_db = get_total_cached_count()
-total_classes = get_total_class_rules_count()
+total_rules = get_total_class_rules_count()
 
 base_catalog = set(get_autocomplete_catalog())
 cached_drugs = set(get_all_cached_drugs())
 all_available_options = sorted(list(base_catalog.union(cached_drugs)))
 
-st.title("💊 MediCheck – Globaler Medikations-Check")
+st.title("💊 MediCheck – Globaler Medikations- & Interaktions-Check")
 
 st.markdown("""
 <div class="disclaimer-banner">
@@ -274,25 +302,22 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.caption(f"Arzneistoffkatalog: **{len(all_available_options):,} Substanzen** (WHO-ATC-Index). Motor: **{total_classes} ATC-Klassenregeln** + **{total_db} Einzelwechselwirkungen**.")
+st.caption(f"Arzneistoffkatalog: **{len(all_available_options):,} Substanzen & Nahrungsmittel**. Regelwerk: **{total_rules} aktive Klassen- & Phyto-Regeln** + **{total_db} Einzelwechselwirkungen**.")
 
-# --- 5. Die smarte Suchleiste ---
 default_selection = [
-    "Delix (Ramipril)",
-    "HCT-Hexal (Hydrochlorothiazid)",
-    "Ibuprofen (z. B. Nurofen, Ibutop, Ibu-Hexal)"
+    "Grapefruit / Grapefruitsaft 🍊",
+    "Simvastatin"
 ]
 valid_defaults = [d for d in default_selection if d in all_available_options]
 
 selected_drugs = st.multiselect(
-    label="Tippen Sie den Namen oder Anfangsbuchstaben ein (z. B. 'Flu', 'Aspirin', 'Cipro', 'Met'):",
+    label="Wählen oder suchen Sie Wirkstoffe, Phytopharmaka oder Lebensmittel:",
     options=all_available_options,
     default=valid_defaults,
-    placeholder="Buchstaben eingeben (z. B. 'Flu', 'Asp', 'Pan')...",
-    help="Tippen Sie einfach Buchstaben ein. Die Liste durchsucht in Echtzeit den gesamten europäischen Arzneistoffkatalog."
+    placeholder="Buchstaben eingeben (z. B. 'Grapefruit', 'Johanniskraut', 'Sertralin', 'Cipro')...",
+    help="Durchsucht in Echtzeit den gesamten Arzneimittel-Index sowie relevante Phytopharmaka und Nahrungsmittel."
 )
 
-# --- 6. Automatische Analyse ---
 detected_interactions = []
 if len(selected_drugs) >= 2:
     with st.spinner("Analysiere Wechselwirkungen..."):
@@ -304,7 +329,6 @@ if len(selected_drugs) >= 2:
                     **result
                 })
 
-# Multi-Drug Synergien & Triple Whammy
 multidrug_synergies = check_multidrug_synergies(selected_drugs) if len(selected_drugs) >= 2 else []
 
 normalized_drugs = [translate_to_inn(d) for d in selected_drugs]
@@ -313,7 +337,6 @@ has_diuretic = any(d in normalized_drugs for d in ["hydrochlorothiazide", "torse
 has_nsar = any(d in normalized_drugs for d in ["ibuprofen", "diclofenac", "naproxen", "etoricoxib"])
 is_triple_whammy = has_raas and has_diuretic and has_nsar
 
-# --- 7. Ampel-Dashboard ---
 has_high = any(item["severity"] == "Hoch" for item in detected_interactions) or is_triple_whammy or any(s["severity"] == "Hoch" for s in multidrug_synergies)
 has_medium = any(item["severity"] == "Moderat" for item in detected_interactions) or len(multidrug_synergies) > 0
 
@@ -322,20 +345,20 @@ col1, col2, col3 = st.columns([1.3, 1, 1])
 with col1:
     if len(selected_drugs) < 2:
         status_color = "#64748b"
-        status_text = "Mindestens 2 Wirkstoffe wählen"
-        status_desc = "Wählen Sie Substanzen aus, um die automatische Analyse zu starten."
+        status_text = "Mindestens 2 Einträge wählen"
+        status_desc = "Wählen Sie Substanzen aus, um die Analyse zu starten."
     elif has_high:
         status_color = "#dc2626"
         status_text = "🔴 Hohe Relevanz fürs Arztgespräch"
-        status_desc = "Kritische Konflikte erkannt. Dringend beim nächsten Arzttermin vorlegen!"
+        status_desc = "Kritische Konflikte erkannt. Dringend ärztlich besprechen!"
     elif has_medium:
         status_color = "#d97706"
-        status_text = "🟡 Monitoring / Überwachung empfohlen"
-        status_desc = "Dokumentierte Wechselwirkungen oder Synergien gefunden."
+        status_text = "🟡 Monitoring empfohlen"
+        status_desc = "Relevante Wechselwirkungen oder Resorptionskonflikte gefunden."
     else:
         status_color = "#16a34a"
         status_text = "🟢 Keine dokumentierten Konflikte"
-        status_desc = "In den hinterlegten Datenbanken ist kein bekannter Konflikt verzeichnet (ersetzt keine ärztliche Prüfung)."
+        status_desc = "In den hinterlegten Datenbanken ist kein bekannter Konflikt verzeichnet."
 
     st.markdown(f"""
     <div class="metric-card" style="border-top: 4px solid {status_color};">
@@ -348,29 +371,26 @@ with col1:
 with col2:
     st.markdown(f"""
     <div class="metric-card">
-        <div class="metric-title">Ausgewählte Medikamente</div>
+        <div class="metric-title">Ausgewählte Substanzen</div>
         <h2 style="margin:0; color: #0284c7;">{len(selected_drugs)}</h2>
-        <div class="metric-desc">Substanzen im aktuellen Check</div>
+        <div class="metric-desc">Arzneimittel & Nahrungsmittel</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col3:
     total_findings = len(detected_interactions) + len(multidrug_synergies) + (1 if is_triple_whammy else 0)
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">Erkannte Befunde</div>
+    <div class="metric-card" style="border-title">Erkannte Befunde</div>
         <h2 style="margin:0; color: {'#dc2626' if total_findings > 0 else '#16a34a'};">
             {total_findings}
         </h2>
-        <div class="metric-desc">Konflikte & Synergien</div>
+        <div class="metric-desc">Konflikte, Resorption & Synergien</div>
     </div>
     """, unsafe_allow_html=True)
 
-# Warnbanner für Triple Whammy
 if is_triple_whammy:
     st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + NSAR-Schmerzmittel drosseln die Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
 
-# Warnkarten für Multi-Drug-Synergien
 for syn in multidrug_synergies:
     st.markdown(f"""
     <div class="synergy-card">
@@ -381,7 +401,6 @@ for syn in multidrug_synergies:
     </div>
     """, unsafe_allow_html=True)
 
-# --- 8. PDF Download ---
 if len(selected_drugs) >= 2:
     pdf_bytes = create_pdf_report(selected_drugs, detected_interactions, is_triple_whammy, multidrug_synergies)
     st.download_button(
@@ -392,7 +411,6 @@ if len(selected_drugs) >= 2:
         use_container_width=True
     )
 
-# --- 9. Detaillierte Befunde ---
 st.subheader("Detaillierte Analyse der Paar-Wechselwirkungen")
 
 if len(detected_interactions) > 0:
@@ -403,7 +421,9 @@ if len(detected_interactions) > 0:
         card_class = "high" if is_high else "medium"
         
         src = item.get("source", "DB")
-        if src == "ATC-Klassenregel":
+        if src == "Phyto-Regelwerk":
+            source_badge_class = "badge-phyto"
+        elif src == "ATC-Klassenregel":
             source_badge_class = "badge-class"
         elif "openFDA" in src:
             source_badge_class = "badge-fda"
@@ -425,11 +445,10 @@ if len(detected_interactions) > 0:
         </div>
         """, unsafe_allow_html=True)
 elif len(selected_drugs) >= 2:
-    st.info("In den hinterlegten Datenbanken wurden für diese Wirkstoffkombination keine dokumentierten kritischen Wechselwirkungen gefunden.")
+    st.info("In den hinterlegten Datenbanken wurden für diese Kombination keine dokumentierten kritischen Wechselwirkungen gefunden.")
 else:
-    st.write("Wählen Sie mindestens zwei Medikamente aus, um den Abgleich zu starten.")
+    st.write("Wählen Sie mindestens zwei Substanzen aus, um den Abgleich zu starten.")
 
-# --- 10. Haftungsausschluss Footer ---
 st.markdown("""
 <div class="disclaimer-box">
     <strong>⚠️ Rechtlicher Hinweis & Haftungsausschluss:</strong><br>
