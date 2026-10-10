@@ -1,8 +1,6 @@
 """
 seed_phytomed.py
-Automatische Einspeisung von Phytopharmaka, Nahrungsergänzungsmitteln
-und Nahrungsmittel-Interaktoren in interactions.db.
-Verknüpft diese automatisiert über ATC-Klassen (z. B. Grapefruit -> CYP3A4-Substrate wie Statine, SSRI, Antihypertensiva).
+Einspeisung von Phytopharmaka, Nahrungsmitteln und Phyto-Phyto-Interaktionen.
 """
 
 import sqlite3
@@ -11,7 +9,6 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "interactions.db")
 
-# 1. Nicht-Arzneistoff-Katalog für die Autocomplete-Suche
 PHYTO_ITEMS = [
     {
         "name": "Grapefruit / Grapefruitsaft 🍊",
@@ -35,11 +32,25 @@ PHYTO_ITEMS = [
         "metabolism": "Hemmung des Platelet-Activating Factor (PAF)"
     },
     {
+        "name": "Knoblauchextrakt (hochdosiert / Allium sativum) 🧄",
+        "atc_code": "PHYTO_GARLIC",
+        "drug_class": "Nahrungsergänzungsmittel (Thrombozytenaggregationshemmer)",
+        "organ_system": "Blutgerinnung",
+        "metabolism": "Hemmung der Thromboxan-Synthese"
+    },
+    {
         "name": "Lakritze / Süßholzwurzel 🍬",
         "atc_code": "PHYTO_LAKRITZE",
         "drug_class": "Nahrungsmittel (11b-HSD2-Inhibitor)",
         "organ_system": "Elektrolyte & Blutdruck",
         "metabolism": "Hemmung von 11beta-HSD2 (Cortisol-Akkumulation)"
+    },
+    {
+        "name": "Sennesblätter / Faulbaum (Anthranoid-Laxanzien) 🍂",
+        "atc_code": "PHYTO_SENNA",
+        "drug_class": "Pflanzliches Abführmittel (Laxans)",
+        "organ_system": "Elektrolyte & Darm",
+        "metabolism": "Sekretagoge Kalium- und Wassersekretion im Kolon"
     },
     {
         "name": "Milchprodukte & Calciumreiches Wasser 🥛",
@@ -64,158 +75,119 @@ PHYTO_ITEMS = [
     }
 ]
 
-# 2. Regelwerk: Verknüpft die Phyto-Stoffe automatisch mit ganzen ATC-Klassen
-PHYTO_RULES = [
-    # --- GRAPEFRUIT ---
-    {
-        "phyto_code": "PHYTO_GRAPEFRUIT",
-        "target_atc": "C10AA",  # Statine (Simvastatin, Atorvastatin)
-        "severity": "Hoch",
-        "system": "Muskulatur & Leber",
-        "effect": "Massiver Anstieg der Statin-Blutspiegel (bis zu 12-fach). Hohes Risiko für Myopathie und Rhabdomyolyse.",
-        "mechanism": "Furanocumarine in Grapefruit inaktivieren irreversibel das Darmwandenzym CYP3A4, wodurch der first-pass-Abbau wegfällt."
-    },
-    {
-        "phyto_code": "PHYTO_GRAPEFRUIT",
-        "target_atc": "C08CA",  # Calciumkanalblocker (Amlodipin, Felodipin, Nifedipin)
-        "severity": "Hoch",
-        "system": "Kreislauf & Blutdruck",
-        "effect": "Starke Blutdruckabfälle, Schwindel, Tachykardie und periphere Ödeme.",
-        "mechanism": "Verhinderter CYP3A4-Abbau führt zu stark erhöhter Bioverfügbarkeit der Dihydropyridine."
-    },
-    {
-        "phyto_code": "PHYTO_GRAPEFRUIT",
-        "target_atc": "N06AB",  # SSRI Antidepressiva (Sertralin etc.)
-        "severity": "Moderat",
-        "system": "Zentralnervensystem",
-        "effect": "Erhöhte Wirkspiegel des Antidepressivums. Verstärkte Nebenwirkungen (Tremor, Schwindel, Übelkeit, Sedierung).",
-        "mechanism": "Kompetitive Hemmung des CYP3A4-vermittelten Abbaus von Sertralin und verwandten Antidepressiva."
-    },
-    {
-        "phyto_code": "PHYTO_GRAPEFRUIT",
-        "target_atc": "L04AD",  # Calcineurin-Inhibitoren (Tacrolimus, Ciclosporin)
-        "severity": "Hoch",
-        "system": "Nierenfunktion & Immunsystem",
-        "effect": "Toxische Spiegelspitzen des Immunsuppressivums mit akuter Nephrotoxizität.",
-        "mechanism": "Duale Hemmung von enteralem CYP3A4 und P-Glykoprotein."
-    },
+# Regeln gegen Arzneistoffe (Target = ATC)
+PHYTO_ATC_RULES = [
+    # Grapefruit
+    {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "C10AA", "severity": "Hoch", "system": "Muskulatur & Leber",
+     "effect": "Massiver Anstieg der Statin-Blutspiegel (bis zu 12-fach). Hohes Risiko für Myopathie und Rhabdomyolyse.",
+     "mechanism": "Furanocumarine inaktivieren irreversibel intestinales CYP3A4."},
+    {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "C08CA", "severity": "Hoch", "system": "Kreislauf & Blutdruck",
+     "effect": "Starke Blutdruckabfälle, Schwindel, Tachykardie und periphere Ödeme.",
+     "mechanism": "Verhinderter first-pass CYP3A4-Abbau der Dihydropyridine."},
+    {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "N06AB", "severity": "Moderat", "system": "ZNS",
+     "effect": "Erhöhte SSRI-Spiegel mit verstärkten Nebenwirkungen (Tremor, Sedierung).",
+     "mechanism": "Kompetitive Hemmung des CYP3A4-Abbaus."},
+    {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "L04AD", "severity": "Hoch", "system": "Nierenfunktion",
+     "effect": "Toxische Immunsuppressiva-Spitzen mit akuter Nephrotoxizität.",
+     "mechanism": "Duale Hemmung von enteralem CYP3A4 und P-Glykoprotein."},
 
-    # --- JOHANNISKRAUT ---
+    # Johanniskraut
+    {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "L04A", "severity": "Hoch", "system": "Transplantation",
+     "effect": "Akuter Wirkungsverlust mit lebensgefährlichem Risiko für Transplantatabstoßung.",
+     "mechanism": "Hyperforin induziert CYP3A4 und P-gp massiv."},
+    {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "B01AF", "severity": "Hoch", "system": "Blutgerinnung",
+     "effect": "Wirkverlust der DOAKs mit Risiko für Thrombosen und Schlaganfälle.",
+     "mechanism": "Beschleunigte Elimination über induziertes CYP3A4 und P-gp."},
+    {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "G03A", "severity": "Hoch", "system": "Hormonhaushalt",
+     "effect": "Verlust des Empfängnisschutzes bei oralen Kontrazeptiva.",
+     "mechanism": "Beschleunigter hepatischer Östrogen- und Gestagenabbau."},
+    {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "N06A", "severity": "Hoch", "system": "ZNS",
+     "effect": "Gefahr eines lebensbedrohlichen Serotoninsyndroms.",
+     "mechanism": "Additive Hemmung der serotonergen Wiederaufnahme."},
+
+    # Ginkgo
+    {"phyto_code": "PHYTO_GINKGO", "target_atc": "B01", "severity": "Hoch", "system": "Hämostase",
+     "effect": "Signifikant erhöhtes Risiko spontaner Blutungen.",
+     "mechanism": "Ginkgolide hemmen den Platelet-Activating Factor (PAF) additiv zur Antikoagulation."},
+    {"phyto_code": "PHYTO_GINKGO", "target_atc": "M01A", "severity": "Moderat", "system": "Magen & Gerinnung",
+     "effect": "Gesteigerte Blutungsneigung und mukosale Schädigung.",
+     "mechanism": "Kombinierte Hemmung von COX-1 und PAF-Rezeptor."},
+
+    # Knoblauch
+    {"phyto_code": "PHYTO_GARLIC", "target_atc": "B01", "severity": "Hoch", "system": "Hämostase",
+     "effect": "Potenzierung des Blutungsrisikos unter Antikoagulanzien/Thrombozytenaggregationshemmern.",
+     "mechanism": "Additive Thrombozyteninhibition durch Schwefelverbindungen (Ajoen/Allicin)."},
+
+    # Lakritze
+    {"phyto_code": "PHYTO_LAKRITZE", "target_atc": "C03", "severity": "Hoch", "system": "Elektrolyte",
+     "effect": "Schwere Hypokaliämie und Arrhythmierisiko.",
+     "mechanism": "Glycyrrhizin hemmt 11beta-HSD2 und potenziert renale Kaliumverluste."},
+    {"phyto_code": "PHYTO_LAKRITZE", "target_atc": "C01A", "severity": "Hoch", "system": "Herzrhythmus",
+     "effect": "Toxische Glykosid-Wirkung mit ventrikulären Rhythmusstörungen.",
+     "mechanism": "Hypokaliämie sensibilisiert das Myokard für Digitalisglykoside."},
+
+    # Sennesblätter / Faulbaum
+    {"phyto_code": "PHYTO_SENNA", "target_atc": "C01A", "severity": "Hoch", "system": "Herzrhythmus",
+     "effect": "Gesteigerte Toxizität von Digitalisglykosiden.",
+     "mechanism": "Chronische enterale Kaliumverluste führen zu myokardialer Überempfindlichkeit."},
+    {"phyto_code": "PHYTO_SENNA", "target_atc": "C03", "severity": "Moderat", "system": "Elektrolyte",
+     "effect": "Verstärkter Kaliumverlust durch additive diuretische und laxierende Effekte.",
+     "mechanism": "Kombinierte renale und intestinale Kaliumsekretion."},
+
+    # Calcium / Milch
+    {"phyto_code": "PHYTO_CALCIUM", "target_atc": "J01MA", "severity": "Hoch", "system": "Resorption",
+     "effect": "Therapieversagen von Fluorchinolonen (bis zu 90% Resorptionsverlust).",
+     "mechanism": "Unlösliche Chelatkomplex-Bildung mit Ca2+-Ionen."},
+    {"phyto_code": "PHYTO_CALCIUM", "target_atc": "J01AA", "severity": "Hoch", "system": "Resorption",
+     "effect": "Therapieversagen bei Tetracyclinen.",
+     "mechanism": "Chelatkomplexierung verhindert enterale Aufnahme."},
+    {"phyto_code": "PHYTO_CALCIUM", "target_atc": "H03AA", "severity": "Moderat", "system": "Schilddrüse",
+     "effect": "Verminderte L-Thyroxin-Resorption.",
+     "mechanism": "Adsorption an unlösliche Calciumsalze."},
+
+    # Cannabidiol
+    {"phyto_code": "PHYTO_CBD", "target_atc": "N03A", "severity": "Hoch", "system": "ZNS",
+     "effect": "Exzessive Sedierung und Ataxie bei Antiepileptika (z. B. Clobazam).",
+     "mechanism": "Hemmung von CYP2C19 und CYP3A4 verzögert Metabolitenabbau."}
+]
+
+# Regeln für Pflanze + Pflanze (Target = Phyto-Code)
+PHYTO_PHYTO_RULES = [
     {
-        "phyto_code": "PHYTO_JOHANNISKRAUT",
-        "target_atc": "L04A",  # Immunsuppressiva
-        "severity": "Hoch",
-        "system": "Immunsystem & Transplantation",
-        "effect": "Akuter Wirkungsverlust mit lebensgefährlichem Risiko für Transplantatabstoßung.",
-        "mechanism": "Hyperforin aktiviert den PXR-Rezeptor und induziert CYP3A4 und P-Glykoprotein massiv. Die Wirkstoffe werden vorzeitig eliminiert."
-    },
-    {
-        "phyto_code": "PHYTO_JOHANNISKRAUT",
-        "target_atc": "B01AF",  # DOAKs (Faktor-Xa-Hemmer: Rivaroxaban, Apixaban)
-        "severity": "Hoch",
+        "phyto_a": "PHYTO_GINKGO",
+        "phyto_b": "PHYTO_GARLIC",
+        "severity": "Moderat",
         "system": "Blutgerinnung",
-        "effect": "Wirkverlust des Gerinnungshemmers mit Risiko für Schlaganfälle und Thrombosen.",
-        "mechanism": "Beschleunigte Elimination über induziertes CYP3A4 und Efflux-Transporter P-Glykoprotein."
+        "effect": "[Phyto-Kombination] Additive Thrombozytenaggregationshemmung mit gesteigerter Blutungsneigung.",
+        "mechanism": "Duale Hemmung: Ginkgolide blockieren PAF, während Allicin/Ajoen die Thromboxan-Bildung hemmen."
     },
     {
-        "phyto_code": "PHYTO_JOHANNISKRAUT",
-        "target_atc": "G03A",  # Hormonelle Kontrazeptiva ("Anti-Baby-Pille")
+        "phyto_a": "PHYTO_LAKRITZE",
+        "phyto_b": "PHYTO_SENNA",
         "severity": "Hoch",
-        "system": "Hormonhaushalt",
-        "effect": "Verlust des Empfängnisschutzes (Zwischenblutungen, ungewollte Schwangerschaft).",
-        "mechanism": "Beschleunigter hepatischer Abbau von Östrogenen und Gestagenen durch CYP3A4-Induktion."
+        "system": "Elektrolyte & Kreislauf",
+        "effect": "[Phyto-Kombination] Akuter Kaliumverlust (schwere Hypokaliämie) und Muskelschwäche.",
+        "mechanism": "Synergismus: Renale Kaliumausscheidung (Lakritze) plus intestinaler Kaliumverlust (Anthranoid-Laxans)."
     },
     {
-        "phyto_code": "PHYTO_JOHANNISKRAUT",
-        "target_atc": "N06A",  # Antidepressiva (SSRI, SNRI, Trizyklika)
-        "severity": "Hoch",
-        "system": "Zentralnervensystem",
-        "effect": "Gefahr eines lebensbedrohlichen Serotoninsyndroms (Hyperthermie, Tremor, Myoklonien, Delir).",
-        "mechanism": "Pharmakodynamischer Synergismus: Additive Hemmung der Serotonin-Wiederaufnahme am synaptischen Spalt."
-    },
-
-    # --- GINKGO BILOBA ---
-    {
-        "phyto_code": "PHYTO_GINKGO",
-        "target_atc": "B01",  # Alle Antithrombotika / Antikoagulanzien / Thrombozytenhemmer
-        "severity": "Hoch",
-        "system": "Hämostase & Blutgerinnung",
-        "effect": "Signifikant erhöhtes Risiko spontaner Blutungen (inkl. Hirnblutungen und Magen-Darm-Blutungen).",
-        "mechanism": "Ginkgolide hemmen den Platelet-Activating Factor (PAF) und verstärken die Blutungsneigung additiv."
-    },
-    {
-        "phyto_code": "PHYTO_GINKGO",
-        "target_atc": "M01A",  # NSAR-Schmerzmittel (Ibuprofen, Diclofenac etc.)
+        "phyto_a": "PHYTO_JOHANNISKRAUT",
+        "phyto_b": "PHYTO_CBD",
         "severity": "Moderat",
-        "system": "Blutgerinnung & Magenschleimhaut",
-        "effect": "Gesteigerte Blutungsneigung und mukosale Mikroläsionen.",
-        "mechanism": "Kombinierte Hemmung von COX-1 (NSAR) und PAF-Rezeptor (Ginkgo)."
-    },
-
-    # --- LAKRITZE ---
-    {
-        "phyto_code": "PHYTO_LAKRITZE",
-        "target_atc": "C03",  # Diuretika (Schleifendiuretika, Thiazide)
-        "severity": "Hoch",
-        "system": "Elektrolyte & Herzrhythmus",
-        "effect": "Schwere, therapieresistente Hypokaliämie und Arrhythmierisiko.",
-        "mechanism": "Glycyrrhizin blockiert 11beta-HSD2, Cortisol stimuliert Mineralokortikoid-Rezeptoren. Dies potenziert renale Kaliumverluste durch Diuretika."
-    },
-    {
-        "phyto_code": "PHYTO_LAKRITZE",
-        "target_atc": "C01A",  # Herzglykoside (Digoxin, Digitoxin)
-        "severity": "Hoch",
-        "system": "Kardiale Reizleitung",
-        "effect": "Toxische Glykosid-Wirkung mit lebensgefährlichen ventrikulären Herzrhythmusstörungen.",
-        "mechanism": "Hypokaliämie durch Lakritze sensibilisiert das Myokard massiv für Digitalisglykoside."
-    },
-
-    # --- CALCIUM / MILCHPRODUKTE ---
-    {
-        "phyto_code": "PHYTO_CALCIUM",
-        "target_atc": "J01MA",  # Fluorchinolone (Ciprofloxacin, Moxifloxacin)
-        "severity": "Hoch",
-        "system": "Resorption / Infektionsschutz",
-        "effect": "Massives Therapieversagen der Antibiotika-Behandlung (Resorptionsabfall bis zu 90%).",
-        "mechanism": "Bildung stabiler, nicht-resorbierbarer Chelat-Komplexe mit zweiwertigen Calcium-Ionen im Darmlumen."
-    },
-    {
-        "phyto_code": "PHYTO_CALCIUM",
-        "target_atc": "J01AA",  # Tetracycline (Doxycyclin)
-        "severity": "Hoch",
-        "system": "Resorption",
-        "effect": "Therapieversagen bei bakteriellen Infektionen.",
-        "mechanism": "Chelatkomplex-Bildung verhindert die enterale Absorption."
-    },
-    {
-        "phyto_code": "PHYTO_CALCIUM",
-        "target_atc": "H03AA",  # Schilddrüsenhormone (Levothyroxin)
-        "severity": "Moderat",
-        "system": "Schilddrüse & Stoffwechsel",
-        "effect": "Verminderte Hormonresorption mit persistierender Schilddrüsenunterfunktion.",
-        "mechanism": "Adsorption von Thyroxin an unlösliche Calciumsalze im Magen-Darm-Trakt."
-    },
-
-    # --- CANNABIDIOL (CBD) ---
-    {
-        "phyto_code": "PHYTO_CBD",
-        "target_atc": "N03A",  # Antiepileptika (Clobazam etc.)
-        "severity": "Hoch",
-        "system": "Zentralnervensystem",
-        "effect": "Exzessive Sedierung, Ataxie und Atemdämpfung durch Akkumulation aktiver Metaboliten.",
-        "mechanism": "CBD inhibiert CYP2C19 und CYP3A4, wodurch der Abbau von N-Desmethylclobazam blockiert wird."
+        "system": "Lebermetabolismus",
+        "effect": "[Phyto-Kombination] Kinetischer Antagonismus an Cytochrom-P450-Enzymen.",
+        "mechanism": "Johanniskraut induziert CYP3A4, während CBD dasselbe Isoenzym inhibiert. Blutspiegel begleitender Substanzen werden unvorhersehbar."
     }
 ]
 
+
 def init_phytomed():
     print("=" * 70)
-    print("🌿 Initialisiere Phytomedizin- & Nahrungsmittel-Engine...")
+    print("🌿 Aktualisiere Phytomedizin-, Nahrungsmittel- & Phyto-Phyto-Engine...")
     print("=" * 70)
 
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # Tabelle für Phytoregeln anlegen
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS "phytomed_rules" (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -229,13 +201,21 @@ def init_phytomed():
     """)
     cursor.execute('DELETE FROM "phytomed_rules"')
 
-    for r in PHYTO_RULES:
+    # 1. Phyto-zu-ATC Regeln
+    for r in PHYTO_ATC_RULES:
         cursor.execute("""
             INSERT INTO "phytomed_rules" (phyto_code, target_atc, severity, system, effect, mechanism)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (r["phyto_code"], r["target_atc"], r["severity"], r["system"], r["effect"], r["mechanism"]))
 
-    # Phyto-Items in 'drugs' eintragen, damit sie in der Suchleiste erscheinen
+    # 2. Phyto-zu-Phyto Regeln in dieselbe Tabelle
+    for r in PHYTO_PHYTO_RULES:
+        cursor.execute("""
+            INSERT INTO "phytomed_rules" (phyto_code, target_atc, severity, system, effect, mechanism)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (r["phyto_a"], r["phyto_b"], r["severity"], r["system"], r["effect"], r["mechanism"]))
+
+    # 3. Phyto-Items in 'drugs' eintragen
     for item in PHYTO_ITEMS:
         cursor.execute("""
             INSERT OR REPLACE INTO "drugs" (name, atc_code, drug_class, organ_system, metabolism)
@@ -247,9 +227,10 @@ def init_phytomed():
     rules_count = cursor.fetchone()[0]
     conn.close()
 
-    print(f"✅ {len(PHYTO_ITEMS)} Phyto-/Nahrungsmittel in Autocomplete hinterlegt.")
-    print(f"✅ {rules_count} automatische Phyto-Interaktionsregeln aktiviert!")
+    print(f"✅ {len(PHYTO_ITEMS)} Phyto-/Nahrungsmittel im Autocomplete hinterlegt.")
+    print(f"✅ {rules_count} Phyto- und Phyto-Phyto-Regeln aktiv!")
     print("=" * 70)
+
 
 if __name__ == "__main__":
     init_phytomed()
