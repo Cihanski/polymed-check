@@ -1,7 +1,7 @@
 """
 drug_translator.py
-Automatisierte Normalisierung von Markennamen, Handelsnamen und Generika auf INN.
-Nutzt lokale Heuristiken, bekannte Kern-Markennamen und die offizielle RxNorm API.
+Automatisierte Normalisierung von Markennamen, Handelsnamen, Generika
+und Aufspaltung von Fixkombinations-Praeparaten auf INN.
 """
 
 import re
@@ -12,7 +12,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "interactions.db")
 
-# 1. Bekannte deutsche & internationale Kern-Markennamen (fuer Autocomplete-Vorauswahl)
+# 1. Bekannte Einzel-Markennamen
 BRAND_TO_INN = {
     # Kardiovaskulaer & Blutdruck
     "xarelto": "rivaroxaban",
@@ -71,7 +71,22 @@ BRAND_TO_INN = {
     "prograf": "tacrolimus"
 }
 
-# Deutsche Generika-Herstellerkuerzel zum Herausfiltern via Regex
+# 2. Bekannte Fixkombinationen (Brand -> [Wirkstoff A, Wirkstoff B])
+FIXED_COMBINATIONS = {
+    "co-diovan": ["valsartan", "hydrochlorothiazide"],
+    "codiovan": ["valsartan", "hydrochlorothiazide"],
+    "co-amoxiclav": ["amoxicillin", "clavulanic acid"],
+    "augmentin": ["amoxicillin", "clavulanic acid"],
+    "janumet": ["sitagliptin", "metformin"],
+    "vimovo": ["naproxen", "esomeprazole"],
+    "vytorin": ["ezetimibe", "simvastatin"],
+    "inegy": ["ezetimibe", "simvastatin"],
+    "caduet": ["amlodipine", "atorvastatin"],
+    "exforge": ["amlodipine", "valsartan"],
+    "sevikar": ["olmesartan", "amlodipine"],
+    "bi-delix": ["ramipril", "hydrochlorothiazide"]
+}
+
 GENERIC_SUFFIXES = [
     r"\bratiopharm\b", r"\bhexal\b", r"\bstada\b", r"\b1a pharma\b",
     r"\b1 a pharma\b", r"\bal\b", r"\bheumann\b", r"\bzenon\b",
@@ -80,12 +95,9 @@ GENERIC_SUFFIXES = [
 
 
 def clean_generic_brand_name(name):
-    """
-    Entfernt Hersteller-Kuerzel wie 'ratiopharm', 'HEXAL' oder Dosisangaben,
-    um direkt den INN freizulegen (z. B. 'Ramipril-ratiopharm 5mg' -> 'Ramipril').
-    """
+    """Entfernt Hersteller-Kuerzel und Dosisangaben."""
     cleaned = name
-    cleaned = re.sub(r"\b\d+\s*(mg|g|ug|µg|ml)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b\d+(\.\d+)?\s*(mg|g|ug|µg|ml)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = cleaned.replace("-", " ")
 
     for suffix in GENERIC_SUFFIXES:
@@ -95,16 +107,12 @@ def clean_generic_brand_name(name):
 
 
 def query_rxnorm_api(brand_name):
-    """
-    Fragt die offizielle U.S. NLM RxNorm API ab, um ueber die Relation
-    'allrelated' gezielt den aktiven Inhaltsstoff (Ingredient / IN) aufzuloesen.
-    """
+    """Fragt die U.S. NLM RxNorm API fuer Einzelwirkstoffe ab."""
     clean_term = clean_generic_brand_name(brand_name)
     if not clean_term or len(clean_term) < 3:
         return None
 
     try:
-        # 1. RxCUI des Markennamens abfragen
         find_url = f"https://rxnav.nlm.nih.gov/REST/rxcui.json?name={clean_term}"
         resp = requests.get(find_url, timeout=3)
         if resp.status_code != 200:
@@ -117,36 +125,74 @@ def query_rxnorm_api(brand_name):
 
         rxcui = rxnorm_ids[0]
 
-        # 2. Den verknuepften Inhaltsstoff (Ingredient / IN) aufloesen
         rel_url = f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/allrelated.json"
         rel_resp = requests.get(rel_url, timeout=3)
         if rel_resp.status_code == 200:
             rel_group = rel_resp.json().get("allRelatedGroup", {})
             for concept_group in rel_group.get("conceptGroup", []):
-                if concept_group.get("tty") == "IN":  # IN = Ingredient
+                if concept_group.get("tty") == "IN":
                     concept_props = concept_group.get("conceptProperties", [])
                     if concept_props:
                         return concept_props[0].get("name", "").lower().strip()
-
     except Exception:
         pass
 
     return None
 
 
+def resolve_drug_to_inns(name):
+    """
+    Spaltet ein Arzneimittel auf, falls es sich um eine Fixkombination handelt.
+    Gibt stets eine Liste von INN-Strings zurueck (z. B. ['valsartan', 'hydrochlorothiazide']).
+    """
+    if not name:
+        return []
+
+    raw_clean = name.strip()
+
+    # Phyto/Kationen direkt zurueckgeben
+    if raw_clean.startswith("PHYTO_") or any(em in raw_clean for em in ["🍊", "🥛", "🌿", "🩸", "🍬", "🍂", "🍃", "🧄", "⚡", "🍵"]):
+        return [raw_clean]
+
+    # Falls der Autocomplete-Name 'Brand (Inn1 + Inn2)' lautet
+    if "(" in raw_clean and ")" in raw_clean:
+        inside = raw_clean[raw_clean.find("(") + 1:raw_clean.find(")")].strip().lower()
+        if "+" in inside or " / " in inside:
+            parts = re.split(r"\+|\/", inside)
+            return [p.strip() for p in parts if p.strip()]
+        return [inside]
+
+    lower_name = raw_clean.lower().replace("-", " ").strip()
+
+    # 1. Pruefung bekannter Marken-Kombinationen
+    for combo_key, components in FIXED_COMBINATIONS.items():
+        if combo_key.replace("-", " ") in lower_name:
+            return components
+
+    # 2. Generische Syntax mit 'plus', 'comp', 'comp.', '+'
+    split_match = re.split(r"\bplus\b|\bcomp\.?\b|\+", lower_name, flags=re.IGNORECASE)
+    if len(split_match) >= 2:
+        part_a = clean_generic_brand_name(split_match[0]).strip()
+        part_b = clean_generic_brand_name(split_match[1]).strip()
+
+        # Spezialfall 'HCT' -> 'hydrochlorothiazide'
+        if part_b in ["hct", "hctz"]:
+            part_b = "hydrochlorothiazide"
+
+        inn_a = translate_to_inn(part_a)
+        inn_b = translate_to_inn(part_b)
+        return [inn_a, inn_b]
+
+    # Standard-Einzelsubstanz
+    return [translate_to_inn(raw_clean)]
+
+
 def translate_to_inn(name):
-    """
-    Normalisiert einen Namen auf den internationalen Freinamen (INN):
-    1. Bereinigung von Klammerzusaetzen wie 'Xarelto (Rivaroxaban)'
-    2. Bereinigung von Generika-Zusaetzen
-    3. Lokale Markennamen-Tabelle
-    4. RxNorm API Fallback mit 'allrelated' (Ingredient)
-    """
+    """Normalisiert eine Einzelsubstanz auf den Freinamen."""
     if not name:
         return ""
 
     raw_clean = name.strip()
-
     if raw_clean.startswith("PHYTO_") or any(em in raw_clean for em in ["🍊", "🥛", "🌿", "🩸", "🍬", "🍂", "🍃", "🧄", "⚡", "🍵"]):
         return raw_clean
 
@@ -156,7 +202,6 @@ def translate_to_inn(name):
             return inside.lower()
 
     raw_lower = raw_clean.lower()
-
     if raw_lower in BRAND_TO_INN:
         return BRAND_TO_INN[raw_lower]
 
@@ -180,16 +225,19 @@ def translate_to_inn(name):
 
 
 def get_autocomplete_catalog():
-    """
-    Generiert den Gesamtkatalog fuer das Streamlit-Dropdown:
-    - Alle bekannten Markennamen mit Klarnamen-Hinweis: z. B. 'Xarelto (Rivaroxaban)'
-    - Alle Freinamen (INNs) aus der Datenbank
-    """
+    """Generiert den Katalog inklusive formatierter Fixkombinationen."""
     catalog = set()
 
+    # 1. Einzelmarken
     for brand, inn in BRAND_TO_INN.items():
         catalog.add(f"{brand.capitalize()} ({inn.capitalize()})")
 
+    # 2. Fixkombinationen
+    for brand, comps in FIXED_COMBINATIONS.items():
+        comp_str = " + ".join([c.capitalize() for c in comps])
+        catalog.add(f"{brand.upper()} ({comp_str})")
+
+    # 3. Datenbank-Substanzen
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()

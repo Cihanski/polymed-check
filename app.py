@@ -15,7 +15,7 @@ from cache_manager import (
     get_total_class_rules_count, 
     get_all_cached_drugs
 )
-from drug_translator import translate_to_inn, get_autocomplete_catalog
+from drug_translator import translate_to_inn, resolve_drug_to_inns, get_autocomplete_catalog
 
 st.set_page_config(
     page_title="MediCheck – Weltweiter Medikations- & Interaktions-Check",
@@ -114,6 +114,15 @@ st.markdown("""
         font-size: 0.90rem;
         color: #166534;
     }
+    .combo-box {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-bottom: 16px;
+        font-size: 0.90rem;
+        color: #334155;
+    }
     .monitoring-card {
         background-color: #f0f9ff;
         border: 1px solid #bae6fd;
@@ -153,10 +162,9 @@ st.markdown("""
 
 
 def clean_text_for_pdf(text):
-    """Entfernt Emojis, Sonderzeichen und codiert Text sicher fuer FPDF Latin-1."""
+    """Entfernt Emojis und codiert sicher fuer FPDF Latin-1."""
     if not text:
         return ""
-    
     replacements = {
         "ä": "ae", "ö": "oe", "ü": "ue",
         "Ä": "Ae", "Ö": "Oe", "Ü": "Ue",
@@ -200,42 +208,33 @@ def get_practical_advice(effect_text, mechanism_text, system_name):
     return None
 
 
-def get_aggregated_monitoring(selected_drugs, detected_interactions, synergies):
-    """
-    Aggregiert die notwendigen aerztlichen Kontrollparameter ueber alle
-    gewaehlten Substanzen und erkannten Risikokonstellationen hinweg.
-    """
+def get_aggregated_monitoring(active_drugs, detected_interactions, synergies):
+    """Aggregiert notwendige Kontrollparameter ueber alle aktiven Substanzen."""
     params = set()
     all_codes = []
-    for d in selected_drugs:
+    for d in active_drugs:
         all_codes.extend(get_all_atc_codes(d))
 
     combined_text = " ".join([f"{item.get('effect', '')} {item.get('mechanism', '')} {item.get('system', '')}" for item in detected_interactions]).lower()
     for syn in synergies:
         combined_text += f" {syn.get('effect', '')} {syn.get('mechanism', '')}"
 
-    # 1. Nierenfunktion & Elektrolyte
     if (any(c.startswith("C09") or c.startswith("C03") or c.startswith("M01A") for c in all_codes) or 
         "kalium" in combined_text or "niere" in combined_text or "whammy" in combined_text or "hyperkaliaemie" in combined_text or "hypokaliaemie" in combined_text):
         params.add("Nierenwerte & Elektrolyte: Serum-Kalium, Serum-Natrium, Kreatinin und eGFR")
 
-    # 2. Kardiales EKG / QTc
     if any(syn.get("type") == "Kardiale QT-Verlaengerung" for syn in synergies) or "qt" in combined_text or "torsade" in combined_text or any(c.startswith("C01B") for c in all_codes):
         params.add("Kardiologische Diagnostik: 12-Kanal-Ruhe-EKG (Messung der frequenzkorrigierten QTc-Zeit)")
 
-    # 3. Blutgerinnung & Blutbild
     if any(c.startswith("B01") for c in all_codes) or "blutung" in combined_text or "haemostase" in combined_text:
         params.add("Haemostase & Haematologie: Kleines Blutbild (Hb, Thrombozytenzahl), ggf. Gerinnungsstatus (INR/Quick)")
 
-    # 4. Leberfunktion / Enzyme
     if "statin" in combined_text or "rhabdomyolyse" in combined_text or any(c.startswith("C10AA") for c in all_codes) or "cyp3a4" in combined_text:
         params.add("Hepatische Parameter & Muskelenzyme: ALAT (GPT), ASAT (GOT), Creatin-Kinase (CK bei Myalgien)")
 
-    # 5. Schilddruesenfunktion
     if any(c.startswith("H03AA") for c in all_codes) and ("chelat" in combined_text or "resorption" in combined_text or any(c in ["PHYTO_IRON", "PHYTO_CALCIUM"] for c in all_codes)):
         params.add("Endokrines Monitoring: TSH-Basalwert und freies T4 (fT4) zur Resorptionskontrolle")
 
-    # 6. Digitalisspiegel
     if any(c.startswith("C01AA") for c in all_codes) and ("digitalis" in combined_text or "digoxin" in combined_text or "p-gp" in combined_text):
         params.add("Therapeutisches Drug Monitoring (TDM): Serum-Digoxin-Talspiegel (Serumkonzentration)")
 
@@ -244,7 +243,7 @@ def get_aggregated_monitoring(selected_drugs, detected_interactions, synergies):
 
 @st.cache_data(ttl=3600)
 def load_cached_catalog():
-    """Laedt den gesamten Katalog und cacht ihn im Arbeitsspeicher."""
+    """Laedt den gesamten Katalog in den Cache."""
     base_catalog = set(get_autocomplete_catalog())
     cached_drugs = set(get_all_cached_drugs())
     return sorted(list(base_catalog.union(cached_drugs)))
@@ -313,8 +312,8 @@ def find_interaction_smart(drug_a, drug_b):
     return None
 
 
-def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies, monitoring_params):
-    """Erzeugt einen sauberen PDF-Report inklusive Monitoring-Parametern."""
+def create_pdf_report(selected_drugs, active_drugs, drug_settings, interactions, is_triple, synergies, monitoring_params):
+    """Erzeugt einen sauberen PDF-Report inklusive aufgeschluesselter Wirkstoffe."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -329,11 +328,16 @@ def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies, 
     
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(20, 20, 20)
-    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate & Applikationsformen:"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate & aufgeschluesselte Wirkstoffe:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=10)
-    for d in drugs:
-        inn = translate_to_inn(d)
-        inn_info = f" [Wirkstoff: {inn.capitalize()}]" if inn.lower() != d.lower() and not d.startswith("PHYTO_") else ""
+    for d in selected_drugs:
+        inns = resolve_drug_to_inns(d)
+        if len(inns) > 1:
+            inn_info = f" [Fixkombination: {' + '.join([i.capitalize() for i in inns])}]"
+        else:
+            inn = inns[0]
+            inn_info = f" [Wirkstoff: {inn.capitalize()}]" if inn.lower() != d.lower() and not d.startswith("PHYTO_") else ""
+        
         setting_info = f" ({drug_settings[d]})" if d in drug_settings else ""
         pdf.cell(width, 6, clean_text_for_pdf(f"- {d}{inn_info}{setting_info}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
@@ -364,7 +368,7 @@ def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies, 
         for idx, item in enumerate(interactions, start=1):
             d1, d2 = item["pair"]
             pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(width, 6, clean_text_for_pdf(f"{idx}. {d1} + {d2} [Risiko: {item['severity']} | {item['system']}]"), new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(width, 6, clean_text_for_pdf(f"{idx}. {d1.capitalize()} + {d2.capitalize()} [Risiko: {item['severity']} | {item['system']}]"), new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", size=9)
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"Effekt: {item['effect']}"), new_x="LMARGIN", new_y="NEXT")
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"Details: {item['mechanism']}"), new_x="LMARGIN", new_y="NEXT")
@@ -430,28 +434,54 @@ selected_drugs = st.multiselect(
     label="Wählen oder suchen Sie Wirkstoffe, Phytopharmaka oder Lebensmittel:",
     options=all_available_options,
     default=valid_defaults,
-    placeholder="Buchstaben eingeben (z. B. 'Ramipril', 'Spironolactone', 'Morphine', 'Eisenpraeparate')...",
-    help="Durchsucht in Echtzeit den gesamten Arzneimittel-Index sowie relevante Phytopharmaka und Nahrungsmittel."
+    placeholder="Buchstaben eingeben (z. B. 'Co-Diovan', 'Ramipril plus HCT', 'Vimovo', 'Diclofenac')...",
+    help="Erkennt Einzelwirkstoffe, Markennamen und spaltet Fixkombinationen (z. B. Co-Diovan) automatisch auf."
 )
+
+# ----------------- Aufspaltung von Kombinationspraeparaten -----------------
+active_substances = []
+combo_details = {}
+
+for drug in selected_drugs:
+    resolved = resolve_drug_to_inns(drug)
+    if len(resolved) > 1:
+        combo_details[drug] = resolved
+    for r in resolved:
+        if r not in active_substances:
+            active_substances.append(r)
+
+if combo_details:
+    combo_info_html = "".join([
+        f"<li><strong>{d}:</strong> Aufgespalten in <em>{' + '.join([c.capitalize() for c in comps])}</em></li>"
+        for d, comps in combo_details.items()
+    ])
+    st.markdown(f"""
+    <div class="combo-box">
+        🧩 <strong>Fixkombination(en) erkannt:</strong>
+        <ul style="margin: 4px 0 0 0; padding-left: 20px;">
+            {combo_info_html}
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ----------------- Differenzierung: Darreichung & Dosis -----------------
 drug_settings = {}
 has_configurable_drugs = any(
     any(k in d.lower() for k in ["diclofenac", "ibuprofen", "acetylsalicyl", "aspirin", "hydrocortison"])
-    for d in selected_drugs
+    for d in active_substances
 )
 
 if has_configurable_drugs:
     with st.expander("⚙️ Klinische Präzisierung: Darreichungsform & Dosierung", expanded=True):
         st.caption("Einige Präparate haben je nach Darreichung (z. B. Schmerzgel vs. Tablette) oder Dosis drastisch unterschiedliche Risikoprofile.")
-        cols = st.columns(min(len(selected_drugs), 3))
+        cols = st.columns(min(len(active_substances), 3))
         col_idx = 0
-        for d in selected_drugs:
+        for d in active_substances:
             d_low = d.lower()
             if "diclofenac" in d_low or "ibuprofen" in d_low:
                 with cols[col_idx % len(cols)]:
                     mode = st.radio(
-                        f"**{d}**:",
+                        f"**{d.capitalize()}**:",
                         options=["Oral (Tablette / systemisch)", "Topisch (Gel / Salbe / lokal)"],
                         index=0,
                         key=f"mode_{d}"
@@ -461,7 +491,7 @@ if has_configurable_drugs:
             elif "acetylsalicyl" in d_low or "aspirin" in d_low:
                 with cols[col_idx % len(cols)]:
                     mode = st.radio(
-                        f"**{d}**:",
+                        f"**{d.capitalize()}**:",
                         options=["Niedrigdosis (100 mg – Thrombozytenhemmung)", "Schmerzdosis (≥ 500 mg – NSAR-Wirkung)"],
                         index=0,
                         key=f"mode_{d}"
@@ -471,7 +501,7 @@ if has_configurable_drugs:
             elif "hydrocortison" in d_low or "prednisolon" in d_low:
                 with cols[col_idx % len(cols)]:
                     mode = st.radio(
-                        f"**{d}**:",
+                        f"**{d.capitalize()}**:",
                         options=["Oral (Tablette / systemisch)", "Topisch (Creme / Spray / lokal)"],
                         index=0,
                         key=f"mode_{d}"
@@ -481,9 +511,9 @@ if has_configurable_drugs:
 
 # ----------------- Wechselwirkungsanalyse -----------------
 detected_interactions = []
-if len(selected_drugs) >= 2:
+if len(active_substances) >= 2:
     with st.spinner("Analysiere Wechselwirkungen..."):
-        for drug_a, drug_b in combinations(selected_drugs, 2):
+        for drug_a, drug_b in combinations(active_substances, 2):
             result = find_interaction_smart(drug_a, drug_b)
             if result:
                 item_copy = dict(result)
@@ -500,14 +530,14 @@ if len(selected_drugs) >= 2:
                     **item_copy
                 })
 
-multidrug_synergies = check_multidrug_synergies(selected_drugs) if len(selected_drugs) >= 2 else []
+multidrug_synergies = check_multidrug_synergies(active_substances) if len(active_substances) >= 2 else []
 
-normalized_drugs = [translate_to_inn(d) for d in selected_drugs]
+normalized_drugs = [translate_to_inn(d) for d in active_substances]
 has_raas = any(d in normalized_drugs for d in ["ramipril", "candesartan", "enalapril", "valsartan", "lisinopril"])
 has_diuretic = any(d in normalized_drugs for d in ["hydrochlorothiazide", "torsemide", "furosemide", "spironolactone"])
 
 has_systemic_nsar = False
-for d in selected_drugs:
+for d in active_substances:
     inn = translate_to_inn(d)
     if inn in ["ibuprofen", "diclofenac", "naproxen", "etoricoxib"]:
         setting = drug_settings.get(d, "Oral")
@@ -522,7 +552,7 @@ has_medium = any(item["severity"] == "Moderat" for item in detected_interactions
 col1, col2, col3 = st.columns([1.3, 1, 1])
 
 with col1:
-    if len(selected_drugs) < 2:
+    if len(active_substances) < 2:
         status_color = "#64748b"
         status_text = "Mindestens 2 Einträge wählen"
         status_desc = "Wählen Sie Substanzen aus, um die Analyse zu starten."
@@ -550,9 +580,9 @@ with col1:
 with col2:
     st.markdown(f"""
     <div class="metric-card">
-        <div class="metric-title">Ausgewählte Substanzen</div>
-        <h2 style="margin:0; color: #0284c7;">{len(selected_drugs)}</h2>
-        <div class="metric-desc">Arzneimittel & Nahrungsmittel</div>
+        <div class="metric-title">Aktive Wirkstoffe</div>
+        <h2 style="margin:0; color: #0284c7;">{len(active_substances)}</h2>
+        <div class="metric-desc">Inkl. aufgespaltener Kombinationen</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -575,14 +605,14 @@ for syn in multidrug_synergies:
     st.markdown(f"""
     <div class="synergy-card">
         <h4 style="margin: 0 0 6px 0; color: #9f1239;">⚡ {syn['title']}</h4>
-        <p style="margin: 4px 0; font-size: 0.95rem; color: #1e293b;"><strong>Beteiligte Medikamente:</strong> {', '.join(syn['drugs'])}</p>
+        <p style="margin: 4px 0; font-size: 0.95rem; color: #1e293b;"><strong>Beteiligte Medikamente:</strong> {', '.join([d.capitalize() for d in syn['drugs']])}</p>
         <p style="margin: 4px 0; font-size: 0.92rem; color: #334155;"><strong>Klinischer Effekt:</strong> {syn['effect']}</p>
         <p style="margin: 4px 0 0 0; font-size: 0.88rem; color: #64748b;"><strong>Mechanismus:</strong> {syn['mechanism']}</p>
     </div>
     """, unsafe_allow_html=True)
 
 # ----------------- Labor- & Diagnostik-Ampel -----------------
-monitoring_list = get_aggregated_monitoring(selected_drugs, detected_interactions, multidrug_synergies)
+monitoring_list = get_aggregated_monitoring(active_substances, detected_interactions, multidrug_synergies)
 if monitoring_list:
     st.markdown(f"""
     <div class="monitoring-card">
@@ -596,8 +626,8 @@ if monitoring_list:
     </div>
     """, unsafe_allow_html=True)
 
-if len(selected_drugs) >= 2:
-    pdf_bytes = create_pdf_report(selected_drugs, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list)
+if len(active_substances) >= 2:
+    pdf_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list)
     st.download_button(
         label="📄 Gesprächsleitfaden für das nächste Arztgespräch als PDF herunterladen",
         data=pdf_bytes,
@@ -631,7 +661,7 @@ if len(detected_interactions) > 0:
         st.markdown(f"""
         <div class="interaction-card {card_class}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <h4 style="margin: 0; color: #0f172a;">{d1} &nbsp;⚡&nbsp; {d2}</h4>
+                <h4 style="margin: 0; color: #0f172a;">{d1.capitalize()} &nbsp;⚡&nbsp; {d2.capitalize()}</h4>
                 <div>
                     <span class="status-badge {badge_class}">{item['severity']}</span>
                     <span class="status-badge badge-organ">{item['system']}</span>
@@ -643,7 +673,7 @@ if len(detected_interactions) > 0:
             {advice_html}
         </div>
         """, unsafe_allow_html=True)
-elif len(selected_drugs) >= 2:
+elif len(active_substances) >= 2:
     st.info("In den hinterlegten Datenbanken wurden für diese Kombination keine dokumentierten kritischen Wechselwirkungen gefunden.")
 else:
     st.write("Wählen Sie mindestens zwei Substanzen aus, um den Abgleich zu starten.")
