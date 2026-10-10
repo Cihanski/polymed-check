@@ -22,9 +22,9 @@ Das System kombiniert einen lokalen SQLite-Kern, ein dynamisches WHO-ATC- und Ph
 
 &#x20; 1. \*\*SQLite-Cache:\*\* Sofortige Rückgabe validierter Paare ohne Netzwerklatenz.
 
-&#x20; 2. \*\*Phyto- \& Food-Engine:\*\* Identifikation kritischer Interaktionen mit Phytopharmaka und Nahrungsmitteln (z. B. Johanniskraut, Grapefruitsaft, Ginkgo, Knoblauch, Lakritze, Calcium/Milchprodukte, CBD).
+&#x20; 2. \*\*Phyto- \& Food-Engine:\*\* Identifikation kritischer Interaktionen mit Phytopharmaka, Mineralstoffen und Nahrungsmitteln (z. B. Johanniskraut, Grapefruitsaft, Ginkgo, Knoblauch, Lakritze, Calcium/Milchprodukte, Eisen, Magnesium, CBD).
 
-&#x20; 3. \*\*WHO-ATC Klassenregeln:\*\* Erkennung übergeordneter pharmakodynamischer Klassenkonflikte (z. B. RAAS-Blocker + kaliumsparende Diuretika, Antikoagulation + NSAR).
+&#x20; 3. \*\*WHO-ATC Klassenregeln:\*\* Erkennung übergeordneter pharmakodynamischer Klassenkonflikte (z. B. RAAS-Blocker + kaliumsparende Diuretika, Antikoagulation + NSAR, Opioide + Benzodiazepine, Digoxin + P-gp-Inhibitoren).
 
 &#x20; 4. \*\*openFDA Live-Fallback:\*\* Dynamische Extraktion relevanter Warnhinweise aus US-FDA-Fachinformationen bei seltenen Kombinationen.
 
@@ -42,11 +42,13 @@ Das System kombiniert einen lokalen SQLite-Kern, ein dynamisches WHO-ATC- und Ph
 
 &#x20; \* \*\*QTc-Verlängerung:\*\* Synergistische Hemmung myokardialer Kaliumkanäle (hERG) mit Risiko für Torsade-de-Pointes-Arrhythmien.
 
+&#x20; \* \*\*ZNS- \& Atemdepression:\*\* Kumulative Dämpfung über GABAerge Transmission und mu-Opioid-Signalwege.
+
 \* \*\*Strukturierter PDF-Gesprächsleitfaden:\*\*
 
 &#x20; \* Robuster Latin-1/FPDF-Export ohne Unicode-Artefakte.
 
-&#x20; \* Generierung zielgerichteter Leitfragen und Einnahmeabstandshinweise (z. B. 2–3 Stunden Abstand bei Chelatbildnern) für das Arztgespräch.
+&#x20; \* Generierung zielgerichteter Leitfragen und Einnahmeabstandshinweise (z. B. 2–3 Stunden Abstand bei Chelatbildnern wie Eisen, Magnesium, Milch) für das Arztgespräch.
 
 
 

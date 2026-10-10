@@ -1,7 +1,7 @@
 """
 validate_clinical_cases.py
 Automatisierte Validierung kritischer klinischer Interaktionsszenarien
-fuer MediCheck (Pharmakokinetik, Haemostase, Elektrolyte, Resorption).
+fuer MediCheck (Pharmakokinetik, Haemostase, Elektrolyte, Resorption, ZNS).
 """
 
 from cache_manager import (
@@ -29,7 +29,6 @@ def find_interaction_test(drug_a, drug_b):
     return None
 
 
-# Testfaelle: (Substanz A, Substanz B, Erwarteter Schweregrad, Kurzbeschreibung)
 TEST_CASES = [
     (
         "Grapefruit / Grapefruitsaft 🍊",
@@ -108,13 +107,38 @@ TEST_CASES = [
         "Phenprocoumon",
         "Hoch",
         "NSAR + VKA -> Magenblutungsrisiko"
+    ),
+    # Neue klinische Haertungsfaelle:
+    (
+        "Morphine",
+        "Diazepam",
+        "Hoch",
+        "Opioid + Benzodiazepin -> Letale Atemdepression (FDA Black Box)"
+    ),
+    (
+        "Digoxin",
+        "Verapamil",
+        "Hoch",
+        "P-gp-Inhibition -> Kardiale Digitalis-Toxizitaet"
+    ),
+    (
+        "Eisenpraeparate / Eisentabletten (Fe2+/Fe3+) 🩸",
+        "Levothyroxine sodium",
+        "Hoch",
+        "Eisen-Chelatierung -> Hypothyreose durch Resorptionsverlust"
+    ),
+    (
+        "Sertraline",
+        "Rivaroxaban",
+        "Moderat",
+        "SSRI + DOAK -> Gastrointestinales Blutungsrisiko (Thrombozytenentleerung)"
     )
 ]
 
 
 def run_tests():
     print("=" * 80)
-    print("🧪 Starte pharmakologische Härtungstests für MediCheck...")
+    print("🧪 Starte erweiterte pharmakologische Härtungstests (17 Fälle)...")
     print("=" * 80)
 
     passed = 0
@@ -147,7 +171,7 @@ def run_tests():
 
     print(f"Ergebnis: {passed}/{len(TEST_CASES)} Tests bestanden.")
     if failed == 0:
-        print("🎯 Alle klinischen Kernszenarien werden fehlerfrei erkannt!")
+        print("🎯 Alle 17 klinischen Kernszenarien werden fehlerfrei erkannt!")
     else:
         print(f"⚠️ {failed} Szenario/Szenarien müssen im Regelwerk oder ATC-Mapping nachjustiert werden.")
     print("=" * 80)

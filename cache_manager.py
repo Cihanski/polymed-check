@@ -7,7 +7,7 @@ DB_FILE = os.path.join(BASE_DIR, "interactions.db")
 
 
 def init_db():
-    """Erstellt alle benoetigten Tabellen in der Datenbank."""
+    """Erstellt alle benoetigten Tabellen und initialisiert Kern-Klassenregeln."""
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -55,6 +55,53 @@ def init_db():
                 mechanism TEXT NOT NULL
             )
         """)
+
+        # Neue Kern-Klassenregeln hinterlegen
+        CORE_CLASS_RULES = [
+            # 1. Opioide + Benzodiazepine (FDA Black Box)
+            ("N02A", "N05BA", "Opioide", "Benzodiazepine", "Hoch", "Zentralnervensystem / Atmung",
+             "Lebensbedrohliche Atemdepression, Koma und letale Sedierung.",
+             "Synergistische zentralnervöse Dämpfung an mu-Opioid- und GABAA-Rezeptoren."),
+            ("N02A", "N05CD", "Opioide", "Benzodiazepin-Derivate", "Hoch", "Zentralnervensystem / Atmung",
+             "Schwere ZNS-Depression und Hypoventilation.",
+             "Synergistische Atemdepressionsverstärkung."),
+            ("N02A", "N05CF", "Opioide", "Z-Substanzen (Hypnotika)", "Hoch", "Zentralnervensystem / Atmung",
+             "Ausgepraegte Sedierung und erhoehtes Atemstillstandrisiko.",
+             "Additive Verstärkung inhibitorischer GABAerger und opioider Signalwege."),
+
+            # 2. Digitalis + P-gp-Hemmer / Verapamil / Amiodaron
+            ("C01AA", "C08D", "Digitalisglykoside", "Calciumantagonisten (Verapamil/Diltiazem)", "Hoch", "Kardiovaskulaer / Rhythmus",
+             "Digoxin-Intoxikation mit AV-Block und ventrikulaeren Arrhythmien.",
+             "Hemmung des renalen und biliaeren P-Glykoprotein-Transporters erhoeht Digoxin-Spiegel um 50-100%."),
+            ("C01AA", "C01BD", "Digitalisglykoside", "Klasse-III-Antiarrhythmika (Amiodaron)", "Hoch", "Kardiovaskulaer / Rhythmus",
+             "Akute Digitalistoxizitaet und Bradykardie.",
+             "Amiodaron inhibiert P-gp-vermittelten renalen Digoxintransport signifikant."),
+
+            # 3. SSRI + Antikoagulanzien / Thrombozytenaggregationshemmer
+            ("N06AB", "B01A", "SSRI-Antidepressiva", "Antithrombotika (DOAK/VKA/ASS)", "Moderat", "Haemostase / Gastrointestinal",
+             "Verdopplung bis Verdreifachung des oberen Magen-Darm-Blutungsrisikos.",
+             "SSRI blockieren den SERT-Transporter auf Thrombozyten und entleeren deren Serotoningranula, was die Blutstillung beeintraechtigt."),
+
+            # 4. RAAS-Blockade + Kaliumsparende Diuretika
+            ("C09A", "C03D", "ACE-Hemmer", "Kaliumsparende Diuretika (Aldosteron-Antagonisten)", "Hoch", "Elektrolyte & Herz",
+             "Schwere, potenziell toedliche Hyperkaliaemie.",
+             "Synergistische Hemmung der renalen Kaliumausscheidung."),
+            ("C09C", "C03D", "AT1-Antagonisten (Sartane)", "Kaliumsparende Diuretika (Aldosteron-Antagonisten)", "Hoch", "Elektrolyte & Herz",
+             "Schwere Hyperkaliaemie und Herzrhythmusstoerungen.",
+             "Additive Unterdrueckung der Aldosteron-vermittelten Kaliumsekretion.")
+        ]
+
+        for r in CORE_CLASS_RULES:
+            cursor.execute("""
+                SELECT COUNT(*) FROM "class_rules" 
+                WHERE atc_a = ? AND atc_b = ?
+            """, (r[0], r[1]))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("""
+                    INSERT INTO "class_rules" (atc_a, atc_b, class_name_a, class_name_b, severity, system, effect, mechanism)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, r)
+
         conn.commit()
 
 
@@ -129,7 +176,7 @@ def get_all_atc_codes(drug_name):
         if (code.startswith("J01") or code.startswith("C") or 
             code.startswith("N") or code.startswith("L04") or 
             code.startswith("L") or code.startswith("B01") or 
-            code.startswith("M01")):
+            code.startswith("M01") or code.startswith("H03")):
             return 1
         if code.startswith("S") or code.startswith("D"):
             return 3
@@ -147,8 +194,7 @@ def get_atc_code(drug_name):
 
 def check_phytomed_rules(drug_a, drug_b):
     """
-    Prueft Interaktionen zwischen Phytopharmaka/Nahrungsmitteln und Arzneistoffen.
-    Prueft alle assoziierten Codes beider Substanzen ab.
+    Prueft Interaktionen zwischen Phytopharmaka/Kationen und Arzneistoffen.
     """
     codes_a = get_all_atc_codes(drug_a)
     codes_b = get_all_atc_codes(drug_b)
@@ -221,6 +267,7 @@ def check_multidrug_synergies(drug_list):
     synergies = []
     atc_map = {d: get_all_atc_codes(d) for d in drug_list}
 
+    # 1. Anticholinerge Last
     anticholinergic_drugs = []
     for d, codes in atc_map.items():
         if any(c.startswith("N06AA") or c.startswith("G04BD") or 
@@ -238,6 +285,7 @@ def check_multidrug_synergies(drug_list):
             "mechanism": "Additive Blockade zentraler und peripherer Muskarinrezeptoren durch gleichzeitige Einnahme mehrerer anticholinerg wirksamer Wirkstoffe."
         })
 
+    # 2. QT-Verlaengerung
     qt_prolonging_drugs = []
     for d, codes in atc_map.items():
         if any(c.startswith("J01FA") or c.startswith("J01MA") or 
@@ -253,6 +301,23 @@ def check_multidrug_synergies(drug_list):
             "title": f"Kumulative QT-Zeit-Verlaengerung ({len(qt_prolonging_drugs)} Substanzen)",
             "effect": "Kritisches Risiko fuer Torsade-de-Pointes-Arrhythmien und ploetzlichen Herztod.",
             "mechanism": "Synergistische Hemmung der myokardialen Kaliumkanaele (hERG/IKr) verzoegert die ventrikulaere Repolarisation."
+        })
+
+    # 3. ZNS-Depression (Sedativa + Opioide)
+    zns_depressant_drugs = []
+    for d, codes in atc_map.items():
+        if any(c.startswith("N02A") or c.startswith("N05B") or 
+               c.startswith("N05C") or c.startswith("N03AE") for c in codes):
+            zns_depressant_drugs.append(d)
+
+    if len(zns_depressant_drugs) >= 2:
+        synergies.append({
+            "type": "Kumulative ZNS-Depression",
+            "drugs": zns_depressant_drugs,
+            "severity": "Hoch",
+            "title": f"Kumulative ZNS- & Atemdepression ({len(zns_depressant_drugs)} Substanzen)",
+            "effect": "Gefahr exzessiver Sedierung, schwerer Koordinationsstoerungen, Stuerzen und potentiell letaler Hypoventilation.",
+            "mechanism": "Synergistische zentralnervöse Daempfung ueber erhoehte GABAerge Transmission und mu-Opioid-Rezeptoraktivierung."
         })
 
     return synergies

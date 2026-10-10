@@ -1,6 +1,6 @@
 """
 seed_phytomed.py
-Einspeisung von Phytopharmaka, Nahrungsmitteln und Phyto-Phyto-Interaktionen.
+Einspeisung von Phytopharmaka, Nahrungsmitteln, Kationen-Supplementen und Interaktionen.
 """
 
 import sqlite3
@@ -60,6 +60,20 @@ PHYTO_ITEMS = [
         "metabolism": "Komplexierung mehrwertiger Kationen (Ca2+)"
     },
     {
+        "name": "Eisenpraeparate / Eisentabletten (Fe2+/Fe3+) 🩸",
+        "atc_code": "PHYTO_IRON",
+        "drug_class": "Mineralstoff / Chelatbildner",
+        "organ_system": "Resorption Gastrointestinal",
+        "metabolism": "Bildung unloeslicher Chelate mit Kationen"
+    },
+    {
+        "name": "Magnesiumpraeparate (hochdosiert) ⚡",
+        "atc_code": "PHYTO_MAGNESIUM",
+        "drug_class": "Mineralstoff / Chelatbildner",
+        "organ_system": "Resorption Gastrointestinal",
+        "metabolism": "Bildung unloeslicher Chelate mit Kationen"
+    },
+    {
         "name": "Cannabidiol (CBD-Oel / Hanfextrakte) 🌿",
         "atc_code": "PHYTO_CBD",
         "drug_class": "Cannabinoid / Enzym-Inhibitor",
@@ -75,7 +89,6 @@ PHYTO_ITEMS = [
     }
 ]
 
-# Zusaetzliche Arzneistoff-Mappings fuer systemische Hauptindikationen
 CLINICAL_SYSTEMIC_FIXES = [
     ("Ciclosporin", "L04AD01", "Immunsuppressivum (Calcineurin-Inhibitor)", "Immunsystem / Niere", "CYP3A4 / P-gp"),
     ("Cyclosporine", "L04AD01", "Immunsuppressivum (Calcineurin-Inhibitor)", "Immunsystem / Niere", "CYP3A4 / P-gp")
@@ -110,28 +123,24 @@ PHYTO_ATC_RULES = [
      "effect": "Gefahr eines lebensbedrohlichen Serotoninsyndroms.",
      "mechanism": "Additive Hemmung der serotonergen Wiederaufnahme."},
 
-    # Ginkgo
+    # Ginkgo & Knoblauch
     {"phyto_code": "PHYTO_GINKGO", "target_atc": "B01", "severity": "Hoch", "system": "Haemostase",
      "effect": "Signifikant erhoehtes Risiko spontaner Blutungen.",
      "mechanism": "Ginkgolide hemmen den Platelet-Activating Factor (PAF) additiv zur Antikoagulation."},
     {"phyto_code": "PHYTO_GINKGO", "target_atc": "M01A", "severity": "Moderat", "system": "Magen & Gerinnung",
      "effect": "Gesteigerte Blutungsneigung und mukosale Schaedigung.",
      "mechanism": "Kombinierte Hemmung von COX-1 und PAF-Rezeptor."},
-
-    # Knoblauch
     {"phyto_code": "PHYTO_GARLIC", "target_atc": "B01", "severity": "Hoch", "system": "Haemostase",
      "effect": "Potenzierung des Blutungsrisikos unter Antikoagulanzien/Thrombozytenaggregationshemmern.",
      "mechanism": "Additive Thrombozyteninhibition durch Schwefelverbindungen (Ajoen/Allicin)."},
 
-    # Lakritze
+    # Lakritze & Senna
     {"phyto_code": "PHYTO_LAKRITZE", "target_atc": "C03", "severity": "Hoch", "system": "Elektrolyte",
      "effect": "Schwere Hypokaliaemie und Arrhythmierisiko.",
      "mechanism": "Glycyrrhizin hemmt 11beta-HSD2 und potenziert renale Kaliumverluste."},
     {"phyto_code": "PHYTO_LAKRITZE", "target_atc": "C01A", "severity": "Hoch", "system": "Herzrhythmus",
      "effect": "Toxische Glykosid-Wirkung mit ventrikulaeren Rhythmusstoerungen.",
      "mechanism": "Hypokaliaemie sensibilisiert das Myokard fuer Digitalisglykoside."},
-
-    # Sennesblaetter / Faulbaum
     {"phyto_code": "PHYTO_SENNA", "target_atc": "C01A", "severity": "Hoch", "system": "Herzrhythmus",
      "effect": "Gesteigerte Toxizitaet von Digitalisglykosiden.",
      "mechanism": "Chronische enterale Kaliumverluste fuehren zu myokardialer Ueberempfindlichkeit."},
@@ -147,11 +156,30 @@ PHYTO_ATC_RULES = [
      "effect": "Massives Therapieversagen bei Fluorchinolon-Kombinationen (Resorptionsverlust bis zu 90%).",
      "mechanism": "Unloesliche Chelatkomplex-Bildung mit zweiwertigen Calcium-Ionen im Darmlumen."},
     {"phyto_code": "PHYTO_CALCIUM", "target_atc": "J01AA", "severity": "Hoch", "system": "Resorption",
-     "effect": "Therpieversagen bei Tetracyclin-Antibiotika.",
+     "effect": "Therapieversagen bei Tetracyclin-Antibiotika.",
      "mechanism": "Chelatkomplexierung verhindert enterale Aufnahme."},
     {"phyto_code": "PHYTO_CALCIUM", "target_atc": "H03AA", "severity": "Moderat", "system": "Schilddruese",
      "effect": "Verminderte L-Thyroxin-Resorption.",
      "mechanism": "Adsorption an unloesliche Calciumsalze."},
+
+    # Eisen (Fe)
+    {"phyto_code": "PHYTO_IRON", "target_atc": "H03AA", "severity": "Hoch", "system": "Resorption / Schilddruese",
+     "effect": "Signifikanter Wirkverlust von L-Thyroxin mit Gefahr einer Hypothyreose.",
+     "mechanism": "Eisenionen bilden im Magen-Darm-Trakt unloesliche Komplexe mit Schilddruesenhormonen."},
+    {"phyto_code": "PHYTO_IRON", "target_atc": "J01M", "severity": "Hoch", "system": "Resorption / Infektion",
+     "effect": "Dramatischer Resorptionsausfall von Fluorchinolonen.",
+     "mechanism": "Chelatbildung mit mehrwertigen Eisen-Kationen."},
+    {"phyto_code": "PHYTO_IRON", "target_atc": "M05BA", "severity": "Hoch", "system": "Resorption / Knochen",
+     "effect": "Vollstaendiger Resorptionsausfall von oralen Bisphosphonaten.",
+     "mechanism": "Kationen-Komplexierung verhindert die ohnehin geringe Resorption (< 1%)."},
+
+    # Magnesium (Mg)
+    {"phyto_code": "PHYTO_MAGNESIUM", "target_atc": "J01M", "severity": "Hoch", "system": "Resorption / Infektion",
+     "effect": "Ausgepraegter Resorptionsverlust von Fluorchinolonen.",
+     "mechanism": "Bildung unloeslicher Magnesium-Chelatkomplexe."},
+    {"phyto_code": "PHYTO_MAGNESIUM", "target_atc": "J01AA", "severity": "Hoch", "system": "Resorption / Infektion",
+     "effect": "Resorptionsblockade bei Tetracyclinen.",
+     "mechanism": "Chelatierung mit zweiwertigen Magnesiumionen."},
 
     # Cannabidiol
     {"phyto_code": "PHYTO_CBD", "target_atc": "N03A", "severity": "Hoch", "system": "ZNS",
@@ -192,7 +220,7 @@ PHYTO_PHYTO_RULES = [
 
 def init_phytomed():
     print("=" * 70)
-    print("Aktualisiere Phytomedizin-, Nahrungsmittel- & Phyto-Phyto-Engine...")
+    print("Aktualisiere Phytomedizin-, Kationen- & Phyto-Phyto-Engine...")
     print("=" * 70)
 
     conn = sqlite3.connect(DB_FILE)
@@ -244,7 +272,7 @@ def init_phytomed():
     rules_count = cursor.fetchone()[0]
     conn.close()
 
-    print(f"{len(PHYTO_ITEMS)} Phyto-/Nahrungsmittel hinterlegt.")
+    print(f"{len(PHYTO_ITEMS)} Phyto-/Kationen-Substanzen hinterlegt.")
     print(f"{rules_count} Phyto-Regeln aktiv!")
     print("=" * 70)
 
