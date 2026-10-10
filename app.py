@@ -104,6 +104,15 @@ st.markdown("""
     .interaction-card.medium {
         border-left-color: #f59e0b;
     }
+    .advice-box {
+        background-color: #f0fdf4;
+        border-left: 4px solid #22c55e;
+        border-radius: 4px;
+        padding: 8px 12px;
+        margin-top: 8px;
+        font-size: 0.90rem;
+        color: #166534;
+    }
     .synergy-card {
         background-color: #fff1f2;
         border: 1px solid #fecdd3;
@@ -135,22 +144,54 @@ st.markdown("""
 
 
 def clean_text_for_pdf(text):
-    """
-    Entfernt Emojis und nicht-druckbare Latin-1 Zeichen,
-    damit FPDF ohne Encoding-Fehler generieren kann.
-    """
+    """Entfernt Emojis und nicht-Latin-1 Zeichen fuer FPDF."""
     if not text:
         return ""
-    # Emojis & Piktogramme filtern
     emoji_pattern = re.compile("[\U00010000-\U0010ffff]", flags=re.UNICODE)
     cleaned = emoji_pattern.sub("", text)
-    # Ersetze typische Sonderzeichen, die Latin-1 stören könnten
-    cleaned = cleaned.replace("–", "-").replace("—", "-").replace("’", "'").replace("“", '"').replace("”", '"')
+    cleaned = (cleaned.replace("–", "-")
+                      .replace("—", "-")
+                      .replace("’", "'")
+                      .replace("“", '"')
+                      .replace("”", '"')
+                      .replace("ä", "ae")
+                      .replace("ö", "oe")
+                      .replace("ü", "ue")
+                      .replace("Ä", "Ae")
+                      .replace("Ö", "Oe")
+                      .replace("Ü", "Ue")
+                      .replace("ß", "ss"))
     return cleaned.strip()
 
 
+def get_practical_advice(effect_text, mechanism_text, system_name):
+    """Generiert praxisnahe Handlungsempfehlungen basierend auf dem Wirkmechanismus."""
+    comb_text = f"{effect_text} {mechanism_text} {system_name}".lower()
+    
+    if "chelat" in comb_text or "calcium" in comb_text or "resorption" in comb_text:
+        return "⏰ Einnahme-Tipp: Mindestens 2 bis 3 Stunden zeitlichen Abstand zwischen den Mahlzeiten/Mineralstoffen und der Medikamenteneinnahme einhalten."
+    if "cyp3a4" in comb_text and ("grapefruit" in comb_text or "hypericum" in comb_text or "johanniskraut" in comb_text):
+        return "⚠️ Wichtiger Hinweis: Grapefruit/Johanniskraut waehrend der gesamten Dauer der medikamentoesen Therapie vollstaendig meiden."
+    if "blutung" in comb_text or "haemostase" in comb_text:
+        return "🩸 Vorsichtsmassnahme: Auf vermehrte Blutungszeichen (Zahnfleischbluten, Haematome, dunklen Stuhl) achten und vor operativen Eingriffen aerztlich absprechen."
+    if "hypokaliaemie" in comb_text or "kalium" in comb_text or "diureti" in comb_text:
+        return "🧪 Monitoring: Regelmaessige elektrolytische Laborkontrolle (insbesondere Serum-Kalium) durch den behandelnden Arzt empfohlen."
+    if "qt" in comb_text or "torsade" in comb_text:
+        return "🫀 Kardiologischer Hinweis: Ein Kontroll-EKG zur Bestimmung der QTc-Zeit sollte aerztlich evaluiert werden."
+    
+    return None
+
+
+@st.cache_data(ttl=3600)
+def load_cached_catalog():
+    """Laedt den gesamten Katalog und cacht ihn im Arbeitsspeicher fuer fluessige UI."""
+    base_catalog = set(get_autocomplete_catalog())
+    cached_drugs = set(get_all_cached_drugs())
+    return sorted(list(base_catalog.union(cached_drugs)))
+
+
 def fetch_fda_interaction(drug_a, drug_b):
-    """Fallback: Fragt bei Bedarf die openFDA drug label API an."""
+    """Fallback: openFDA drug label API."""
     inn_a = translate_to_inn(drug_a)
     inn_b = translate_to_inn(drug_b)
     
@@ -191,7 +232,7 @@ def fetch_fda_interaction(drug_a, drug_b):
 
 
 def find_interaction_smart(drug_a, drug_b):
-    """4-Stufen-Prüfkaskade: Cache -> Phyto/Nahrung -> ATC-Klassen -> openFDA."""
+    """4-Stufen-Pruefkaskade: Cache -> Phyto/Nahrung -> ATC-Klassen -> openFDA."""
     cached = check_cache(drug_a, drug_b)
     if cached:
         return cached
@@ -213,7 +254,7 @@ def find_interaction_smart(drug_a, drug_b):
 
 
 def create_pdf_report(drugs, interactions, is_triple, synergies):
-    """Erzeugt einen sauberen PDF-Report (bereinigt um Emojis)."""
+    """Erzeugt einen sauberen PDF-Report inklusive konkreter Handlungsempfehlungen."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -266,6 +307,12 @@ def create_pdf_report(drugs, interactions, is_triple, synergies):
             pdf.set_font("Helvetica", size=9)
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"Effekt: {item['effect']}"), new_x="LMARGIN", new_y="NEXT")
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"Details: {item['mechanism']}"), new_x="LMARGIN", new_y="NEXT")
+            
+            advice = get_practical_advice(item.get("effect", ""), item.get("mechanism", ""), item.get("system", ""))
+            if advice:
+                pdf.set_text_color(22, 101, 52)
+                pdf.multi_cell(width, 5, clean_text_for_pdf(f"Empfehlung: {advice}"), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(20, 20, 20)
             pdf.ln(2)
             
     pdf.ln(3)
@@ -289,10 +336,7 @@ def create_pdf_report(drugs, interactions, is_triple, synergies):
 
 total_db = get_total_cached_count()
 total_rules = get_total_class_rules_count()
-
-base_catalog = set(get_autocomplete_catalog())
-cached_drugs = set(get_all_cached_drugs())
-all_available_options = sorted(list(base_catalog.union(cached_drugs)))
+all_available_options = load_cached_catalog()
 
 st.title("💊 MediCheck – Globaler Medikations- & Interaktions-Check")
 
@@ -305,8 +349,8 @@ st.markdown("""
 st.caption(f"Arzneistoffkatalog: **{len(all_available_options):,} Substanzen & Nahrungsmittel**. Regelwerk: **{total_rules} aktive Klassen- & Phyto-Regeln** + **{total_db} Einzelwechselwirkungen**.")
 
 default_selection = [
-    "Grapefruit / Grapefruitsaft 🍊",
-    "Simvastatin"
+    "Milchprodukte & Calciumreiches Wasser 🥛",
+    "Ciprofloxacin"
 ]
 valid_defaults = [d for d in default_selection if d in all_available_options]
 
@@ -314,7 +358,7 @@ selected_drugs = st.multiselect(
     label="Wählen oder suchen Sie Wirkstoffe, Phytopharmaka oder Lebensmittel:",
     options=all_available_options,
     default=valid_defaults,
-    placeholder="Buchstaben eingeben (z. B. 'Grapefruit', 'Johanniskraut', 'Sertralin', 'Cipro')...",
+    placeholder="Buchstaben eingeben (z. B. 'Grapefruit', 'Johanniskraut', 'Ciprofloxacin', 'Ramipril')...",
     help="Durchsucht in Echtzeit den gesamten Arzneimittel-Index sowie relevante Phytopharmaka und Nahrungsmittel."
 )
 
@@ -380,7 +424,8 @@ with col2:
 with col3:
     total_findings = len(detected_interactions) + len(multidrug_synergies) + (1 if is_triple_whammy else 0)
     st.markdown(f"""
-    <div class="metric-card" style="border-title">Erkannte Befunde</div>
+    <div class="metric-card">
+        <div class="metric-title">Erkannte Befunde</div>
         <h2 style="margin:0; color: {'#dc2626' if total_findings > 0 else '#16a34a'};">
             {total_findings}
         </h2>
@@ -430,6 +475,9 @@ if len(detected_interactions) > 0:
         else:
             source_badge_class = "badge-db"
 
+        advice = get_practical_advice(item.get("effect", ""), item.get("mechanism", ""), item.get("system", ""))
+        advice_html = f'<div class="advice-box">{advice}</div>' if advice else ""
+
         st.markdown(f"""
         <div class="interaction-card {card_class}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -442,6 +490,7 @@ if len(detected_interactions) > 0:
             </div>
             <p style="margin: 6px 0; font-weight: 500; color: #334155;"><strong>Klinischer Befund:</strong> {item['effect']}</p>
             <p style="margin: 6px 0 0 0; color: #64748b; font-size: 0.92rem;"><strong>Hintergrund / Auszug:</strong> {item['mechanism']}</p>
+            {advice_html}
         </div>
         """, unsafe_allow_html=True)
 elif len(selected_drugs) >= 2:

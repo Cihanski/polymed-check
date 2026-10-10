@@ -75,6 +75,12 @@ PHYTO_ITEMS = [
     }
 ]
 
+# Zusaetzliche Arzneistoff-Mappings fuer systemische Hauptindikationen
+CLINICAL_SYSTEMIC_FIXES = [
+    ("Ciclosporin", "L04AD01", "Immunsuppressivum (Calcineurin-Inhibitor)", "Immunsystem / Niere", "CYP3A4 / P-gp"),
+    ("Cyclosporine", "L04AD01", "Immunsuppressivum (Calcineurin-Inhibitor)", "Immunsystem / Niere", "CYP3A4 / P-gp")
+]
+
 PHYTO_ATC_RULES = [
     # Grapefruit
     {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "C10AA", "severity": "Hoch", "system": "Muskulatur & Leber",
@@ -86,12 +92,12 @@ PHYTO_ATC_RULES = [
     {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "N06AB", "severity": "Moderat", "system": "ZNS",
      "effect": "Erhoehte SSRI-Spiegel mit verstaerkten Nebenwirkungen (Tremor, Sedierung).",
      "mechanism": "Kompetitive Hemmung des CYP3A4-Abbaus."},
-    {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "L04AD", "severity": "Hoch", "system": "Nierenfunktion",
+    {"phyto_code": "PHYTO_GRAPEFRUIT", "target_atc": "L04", "severity": "Hoch", "system": "Nierenfunktion",
      "effect": "Toxische Immunsuppressiva-Spitzen mit akuter Nephrotoxizitaet.",
      "mechanism": "Duale Hemmung von enteralem CYP3A4 und P-Glykoprotein."},
 
     # Johanniskraut
-    {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "L04A", "severity": "Hoch", "system": "Transplantation",
+    {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "L04", "severity": "Hoch", "system": "Transplantation",
      "effect": "Akuter Wirkungsverlust mit lebensgefaehrlichem Risiko fuer Transplantatabstossung.",
      "mechanism": "Hyperforin induziert CYP3A4 und P-gp massiv."},
     {"phyto_code": "PHYTO_JOHANNISKRAUT", "target_atc": "B01AF", "severity": "Hoch", "system": "Blutgerinnung",
@@ -133,7 +139,7 @@ PHYTO_ATC_RULES = [
      "effect": "Verstaerkter Kaliumverlust durch additive diuretische und laxierende Effekte.",
      "mechanism": "Kombinierte renale und intestinale Kaliumsekretion."},
 
-    # Calcium / Milch - Decken jetzt Mono (J01M, J01A) und Kombinationsantibiotika (J01R) ab
+    # Calcium / Milch
     {"phyto_code": "PHYTO_CALCIUM", "target_atc": "J01M", "severity": "Hoch", "system": "Resorption",
      "effect": "Massives Therapieversagen bei Fluorchinolon-Antibiotika (Resorptionsverlust bis zu 90%).",
      "mechanism": "Unloesliche Chelatkomplex-Bildung mit zweiwertigen Calcium-Ionen im Darmlumen."},
@@ -149,8 +155,11 @@ PHYTO_ATC_RULES = [
 
     # Cannabidiol
     {"phyto_code": "PHYTO_CBD", "target_atc": "N03A", "severity": "Hoch", "system": "ZNS",
-     "effect": "Exzessive Sedierung und Ataxie bei Antiepileptika (z. B. Clobazam).",
-     "mechanism": "Hemmung von CYP2C19 und CYP3A4 verzoegert Metabolitenabbau."}
+     "effect": "Exzessive Sedierung und Ataxie bei Antiepileptika.",
+     "mechanism": "Hemmung von CYP2C19 und CYP3A4 verzoegert den Metabolitenabbau."},
+    {"phyto_code": "PHYTO_CBD", "target_atc": "N05BA", "severity": "Hoch", "system": "ZNS",
+     "effect": "Exzessive Sedierung, Schlaefrigkeit und Ataxie bei Benzodiazepinen (z. B. Clobazam).",
+     "mechanism": "CBD inhibiert CYP2C19 und CYP3A4, wodurch aktives N-Desmethylclobazam akkumuliert."}
 ]
 
 PHYTO_PHYTO_RULES = [
@@ -222,6 +231,13 @@ def init_phytomed():
             INSERT OR REPLACE INTO "drugs" (name, atc_code, drug_class, organ_system, metabolism)
             VALUES (?, ?, ?, ?, ?)
         """, (item["name"], item["atc_code"], item["drug_class"], item["organ_system"], item["metabolism"]))
+
+    # 4. Systemische Korrekturen eintragen
+    for name, atc, d_class, sys_name, met in CLINICAL_SYSTEMIC_FIXES:
+        cursor.execute("""
+            INSERT OR REPLACE INTO "drugs" (name, atc_code, drug_class, organ_system, metabolism)
+            VALUES (?, ?, ?, ?, ?)
+        """, (name, atc, d_class, sys_name, met))
 
     conn.commit()
     cursor.execute('SELECT COUNT(*) FROM "phytomed_rules"')

@@ -93,7 +93,7 @@ def check_cache(drug_a, drug_b):
 def get_all_atc_codes(drug_name):
     """
     Ermittelt alle hinterlegten ATC- oder Phyto-Codes fuer eine Substanz.
-    Priorisiert systemische Darreichungen vor lokalen Formen.
+    Priorisiert systemische Darreichungen vor lokalen Formen (S, D).
     """
     if not drug_name:
         return []
@@ -126,7 +126,10 @@ def get_all_atc_codes(drug_name):
     def sort_priority(code):
         if code.startswith("PHYTO_"):
             return 0
-        if code.startswith("J01") or code.startswith("C") or code.startswith("N") or code.startswith("M01"):
+        if (code.startswith("J01") or code.startswith("C") or 
+            code.startswith("N") or code.startswith("L04") or 
+            code.startswith("L") or code.startswith("B01") or 
+            code.startswith("M01")):
             return 1
         if code.startswith("S") or code.startswith("D"):
             return 3
