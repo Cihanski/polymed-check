@@ -1,0 +1,30 @@
+name: Halbjaehrliches Arzneistoffkatalog-Update
+
+on:
+  schedule:
+    - cron: '0 2 1 1,7 *'
+  workflow_dispatch: {}
+
+jobs:
+  update-db:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Update-Skript ausfuehren
+        run: |
+          python update_database.py
+          python seed_class_rules.py
+
+      - name: Aktualisierte Datenbank ins Repository committen
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "action@github.com"
+          git add interactions.db
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Automatisches halbjaehrliches Datenbank-Update [skip ci]" && git push)
