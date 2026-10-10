@@ -121,6 +121,13 @@ st.markdown("""
         padding: 16px 20px;
         margin-bottom: 16px;
     }
+    .form-panel {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+    }
     .disclaimer-banner {
         background-color: #eff6ff;
         border-left: 4px solid #3b82f6;
@@ -144,13 +151,10 @@ st.markdown("""
 
 
 def clean_text_for_pdf(text):
-    """
-    Entfernt Emojis, Sonderzeichen und codiert Text absolut sicher fuer den FPDF Latin-1 Zeichensatz.
-    """
+    """Entfernt Emojis, Sonderzeichen und codiert Text sicher fuer FPDF Latin-1."""
     if not text:
         return ""
     
-    # 1. Deutsche Umlaute & Gaengige typografische Sonderzeichen ersetzen
     replacements = {
         "ä": "ae", "ö": "oe", "ü": "ue",
         "Ä": "Ae", "Ö": "Oe", "Ü": "Ue",
@@ -164,10 +168,8 @@ def clean_text_for_pdf(text):
     for original, repl in replacements.items():
         cleaned = cleaned.replace(original, repl)
 
-    # 2. Alle Emojis und Unicode-Symbole (auch 16-Bit Symbole wie ⏰, ⚡, ⚠️, 🩸, 🫀) entfernen
     cleaned_chars = []
     for char in cleaned:
-        # Erlaube nur druckbare ASCII-Zeichen und Basis-Latin-1
         code = ord(char)
         if 32 <= code <= 126 or 160 <= code <= 255 or code == 10:
             cleaned_chars.append(char)
@@ -175,7 +177,6 @@ def clean_text_for_pdf(text):
             cleaned_chars.append(" ")
             
     res = "".join(cleaned_chars)
-    # Mehrfache Leerzeichen zusammenfassen
     return re.sub(r' +', ' ', res).strip()
 
 
@@ -199,7 +200,7 @@ def get_practical_advice(effect_text, mechanism_text, system_name):
 
 @st.cache_data(ttl=3600)
 def load_cached_catalog():
-    """Laedt den gesamten Katalog und cacht ihn im Arbeitsspeicher fuer fluessige UI."""
+    """Laedt den gesamten Katalog und cacht ihn im Arbeitsspeicher."""
     base_catalog = set(get_autocomplete_catalog())
     cached_drugs = set(get_all_cached_drugs())
     return sorted(list(base_catalog.union(cached_drugs)))
@@ -268,8 +269,8 @@ def find_interaction_smart(drug_a, drug_b):
     return None
 
 
-def create_pdf_report(drugs, interactions, is_triple, synergies):
-    """Erzeugt einen sauberen PDF-Report inklusive konkreter Handlungsempfehlungen."""
+def create_pdf_report(drugs, drug_settings, interactions, is_triple, synergies):
+    """Erzeugt einen sauberen PDF-Report inklusive Dosisangaben und Handlungsempfehlungen."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -284,12 +285,13 @@ def create_pdf_report(drugs, interactions, is_triple, synergies):
     
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(20, 20, 20)
-    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate, Phytopharmaka & Nahrungsmittel:"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate & Applikationsformen:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=10)
     for d in drugs:
         inn = translate_to_inn(d)
         inn_info = f" [Wirkstoff: {inn.capitalize()}]" if inn.lower() != d.lower() and not d.startswith("PHYTO_") else ""
-        pdf.cell(width, 6, clean_text_for_pdf(f"- {d}{inn_info}"), new_x="LMARGIN", new_y="NEXT")
+        setting_info = f" ({drug_settings[d]})" if d in drug_settings else ""
+        pdf.cell(width, 6, clean_text_for_pdf(f"- {d}{inn_info}{setting_info}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     
     if is_triple or synergies:
@@ -300,7 +302,7 @@ def create_pdf_report(drugs, interactions, is_triple, synergies):
         pdf.set_font("Helvetica", size=9)
         
         if is_triple:
-            pdf.multi_cell(width, 5, clean_text_for_pdf("- Triple-Whammy-Kombination: Renale Dekompensation durch RAAS-Hemmer + Diuretikum + NSAR."), fill=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(width, 5, clean_text_for_pdf("- Triple-Whammy-Kombination: Renale Dekompensation durch RAAS-Hemmer + Diuretikum + NSAR (systemisch)."), fill=True, new_x="LMARGIN", new_y="NEXT")
         
         for syn in synergies:
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"- {syn['title']}: {syn['effect']}"), fill=True, new_x="LMARGIN", new_y="NEXT")
@@ -373,19 +375,76 @@ selected_drugs = st.multiselect(
     label="Wählen oder suchen Sie Wirkstoffe, Phytopharmaka oder Lebensmittel:",
     options=all_available_options,
     default=valid_defaults,
-    placeholder="Buchstaben eingeben (z. B. 'Grapefruit', 'Johanniskraut', 'Ciprofloxacin', 'Ramipril')...",
+    placeholder="Buchstaben eingeben (z. B. 'Diclofenac', 'Ramipril', 'Grapefruit', 'Ciprofloxacin')...",
     help="Durchsucht in Echtzeit den gesamten Arzneimittel-Index sowie relevante Phytopharmaka und Nahrungsmittel."
 )
 
+# ----------------- Differenzierung: Darreichung & Dosis -----------------
+drug_settings = {}
+has_configurable_drugs = any(
+    any(k in d.lower() for k in ["diclofenac", "ibuprofen", "acetylsalicyl", "aspirin", "hydrocortison"])
+    for d in selected_drugs
+)
+
+if has_configurable_drugs:
+    with st.expander("⚙️ Klinische Präzisierung: Darreichungsform & Dosierung", expanded=True):
+        st.caption("Einige Präparate haben je nach Darreichung (z. B. Schmerzgel vs. Tablette) oder Dosis drastisch unterschiedliche Risikoprofile.")
+        cols = st.columns(min(len(selected_drugs), 3))
+        col_idx = 0
+        for d in selected_drugs:
+            d_low = d.lower()
+            if "diclofenac" in d_low or "ibuprofen" in d_low:
+                with cols[col_idx % len(cols)]:
+                    mode = st.radio(
+                        f"**{d}**:",
+                        options=["Oral (Tablette / systemisch)", "Topisch (Gel / Salbe / lokal)"],
+                        index=0,
+                        key=f"mode_{d}"
+                    )
+                    drug_settings[d] = mode
+                    col_idx += 1
+            elif "acetylsalicyl" in d_low or "aspirin" in d_low:
+                with cols[col_idx % len(cols)]:
+                    mode = st.radio(
+                        f"**{d}**:",
+                        options=["Niedrigdosis (100 mg – Thrombozytenhemmung)", "Schmerzdosis (≥ 500 mg – NSAR-Wirkung)"],
+                        index=0,
+                        key=f"mode_{d}"
+                    )
+                    drug_settings[d] = mode
+                    col_idx += 1
+            elif "hydrocortison" in d_low or "prednisolon" in d_low:
+                with cols[col_idx % len(cols)]:
+                    mode = st.radio(
+                        f"**{d}**:",
+                        options=["Oral (Tablette / systemisch)", "Topisch (Creme / Spray / lokal)"],
+                        index=0,
+                        key=f"mode_{d}"
+                    )
+                    drug_settings[d] = mode
+                    col_idx += 1
+
+# ----------------- Wechselwirkungsanalyse -----------------
 detected_interactions = []
 if len(selected_drugs) >= 2:
     with st.spinner("Analysiere Wechselwirkungen..."):
         for drug_a, drug_b in combinations(selected_drugs, 2):
             result = find_interaction_smart(drug_a, drug_b)
             if result:
+                item_copy = dict(result)
+                # Dosis-/Darreichungs-Modulation
+                setting_a = drug_settings.get(drug_a, "")
+                setting_b = drug_settings.get(drug_b, "")
+                
+                # Wenn einer der Partner rein topisch angewendet wird:
+                if "Topisch" in setting_a or "Topisch" in setting_b:
+                    if item_copy["severity"] == "Hoch" and any(sys_kw in item_copy.get("system", "").lower() for sys_kw in ["niere", "magen", "kreislauf"]):
+                        item_copy["severity"] = "Moderat"
+                        item_copy["effect"] = f"[Lokale Anwendung gewählt] {item_copy['effect']} Durch die topische Anwendung (z. B. Gel) ist die systemische Aufnahme stark reduziert (~6%), wodurch das Organrisiko klinisch minimiert wird."
+                
                 detected_interactions.append({
                     "pair": (drug_a, drug_b),
-                    **result
+                    **item_copy
                 })
 
 multidrug_synergies = check_multidrug_synergies(selected_drugs) if len(selected_drugs) >= 2 else []
@@ -393,8 +452,17 @@ multidrug_synergies = check_multidrug_synergies(selected_drugs) if len(selected_
 normalized_drugs = [translate_to_inn(d) for d in selected_drugs]
 has_raas = any(d in normalized_drugs for d in ["ramipril", "candesartan", "enalapril", "valsartan", "lisinopril"])
 has_diuretic = any(d in normalized_drugs for d in ["hydrochlorothiazide", "torsemide", "furosemide", "spironolactone"])
-has_nsar = any(d in normalized_drugs for d in ["ibuprofen", "diclofenac", "naproxen", "etoricoxib"])
-is_triple_whammy = has_raas and has_diuretic and has_nsar
+
+# Triple Whammy nur dann voll aktiv, wenn das NSAR systemisch eingenommen wird
+has_systemic_nsar = False
+for d in selected_drugs:
+    inn = translate_to_inn(d)
+    if inn in ["ibuprofen", "diclofenac", "naproxen", "etoricoxib"]:
+        setting = drug_settings.get(d, "Oral")
+        if "Topisch" not in setting:
+            has_systemic_nsar = True
+
+is_triple_whammy = has_raas and has_diuretic and has_systemic_nsar
 
 has_high = any(item["severity"] == "Hoch" for item in detected_interactions) or is_triple_whammy or any(s["severity"] == "Hoch" for s in multidrug_synergies)
 has_medium = any(item["severity"] == "Moderat" for item in detected_interactions) or len(multidrug_synergies) > 0
@@ -449,7 +517,7 @@ with col3:
     """, unsafe_allow_html=True)
 
 if is_triple_whammy:
-    st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + NSAR-Schmerkzmittel drosseln die Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
+    st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + orales NSAR drosseln die glomeruläre Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
 
 for syn in multidrug_synergies:
     st.markdown(f"""
@@ -462,7 +530,7 @@ for syn in multidrug_synergies:
     """, unsafe_allow_html=True)
 
 if len(selected_drugs) >= 2:
-    pdf_bytes = create_pdf_report(selected_drugs, detected_interactions, is_triple_whammy, multidrug_synergies)
+    pdf_bytes = create_pdf_report(selected_drugs, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies)
     st.download_button(
         label="📄 Gesprächsleitfaden für das nächste Arztgespräch als PDF herunterladen",
         data=pdf_bytes,
