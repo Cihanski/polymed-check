@@ -4,6 +4,7 @@ Automatisierte Validierung kritischer klinischer Interaktionsszenarien
 fuer MediCheck (Pharmakokinetik, Haemostase, Elektrolyte, Resorption, ZNS).
 """
 
+import sys
 from cache_manager import (
     get_all_atc_codes,
     check_cache,
@@ -108,7 +109,6 @@ TEST_CASES = [
         "Hoch",
         "NSAR + VKA -> Magenblutungsrisiko"
     ),
-    # Neue klinische Haertungsfaelle:
     (
         "Morphine",
         "Diazepam",
@@ -172,10 +172,13 @@ def run_tests():
     print(f"Ergebnis: {passed}/{len(TEST_CASES)} Tests bestanden.")
     if failed == 0:
         print("🎯 Alle 17 klinischen Kernszenarien werden fehlerfrei erkannt!")
+        return 0
     else:
         print(f"⚠️ {failed} Szenario/Szenarien müssen im Regelwerk oder ATC-Mapping nachjustiert werden.")
+        return 1
     print("=" * 80)
 
 
 if __name__ == "__main__":
-    run_tests()
+    exit_code = run_tests()
+    sys.exit(exit_code)
