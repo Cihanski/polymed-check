@@ -1,15 +1,27 @@
+import os
+os.environ["FONTTOOLS_DONT_USE_CYTHON"] = "1"
+
 import streamlit as st
 import requests
 import re
 from itertools import combinations
-from fpdf import FPDF
 from datetime import datetime
+
+# Sicherer Import fuer FPDF (faengt Windows-Sicherheitsblockaden / DLL-Fehler ab)
+FPDF_AVAILABLE = False
+try:
+    from fpdf import FPDF
+    FPDF_AVAILABLE = True
+except (ImportError, Exception):
+    FPDF_AVAILABLE = False
+
 from cache_manager import (
     check_cache, 
     check_phytomed_rules,
     check_class_rules, 
     check_multidrug_synergies,
     get_all_atc_codes,
+    get_drug_pharmacology,
     save_to_cache, 
     get_total_cached_count, 
     get_total_class_rules_count, 
@@ -122,6 +134,14 @@ st.markdown("""
         margin-bottom: 16px;
         font-size: 0.90rem;
         color: #334155;
+    }
+    .profile-card {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .monitoring-card {
         background-color: #f0f9ff;
@@ -312,8 +332,63 @@ def find_interaction_smart(drug_a, drug_b):
     return None
 
 
-def create_pdf_report(selected_drugs, active_drugs, drug_settings, interactions, is_triple, synergies, monitoring_params):
-    """Erzeugt einen sauberen PDF-Report inklusive aufgeschluesselter Wirkstoffe."""
+def generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params):
+    """Fallback-Report als formatierter Text, falls FPDF blockiert wird."""
+    lines = []
+    lines.append("=" * 70)
+    lines.append("MediCheck - Medikations- & Gespraechsleitfaden")
+    lines.append(f"Erstellt am: {datetime.now().strftime('%d.%m.%Y um %H:%M Uhr')}")
+    lines.append("=" * 70 + "\n")
+    
+    lines.append("1. Erfasste Praeparate & aufgeschluesselte Wirkstoffe:")
+    for d in selected_drugs:
+        inns = resolve_drug_to_inns(d)
+        inn_info = f" [Fixkombination: {' + '.join([i.capitalize() for i in inns])}]" if len(inns) > 1 else ""
+        setting_info = f" ({drug_settings[d]})" if d in drug_settings else ""
+        lines.append(f"- {d}{inn_info}{setting_info}")
+    lines.append("")
+
+    if is_triple or synergies:
+        lines.append("WARNUNG: Kumulative Mehrfach-Risiken (Multi-Drug Synergien):")
+        if is_triple:
+            lines.append("- Triple-Whammy: RAAS-Hemmer + Diuretikum + NSAR (systemisch) -> Akute Nierenbelastung")
+        for syn in synergies:
+            lines.append(f"- {syn['title']}: {syn['effect']}")
+        lines.append("")
+
+    lines.append(f"2. Gefundene Einzelwechselwirkungen ({len(interactions)} Befunde):")
+    if not interactions:
+        lines.append("Keine kritischen Konflikte dokumentiert.")
+    else:
+        for idx, item in enumerate(interactions, start=1):
+            d1, d2 = item["pair"]
+            lines.append(f"{idx}. {d1.capitalize()} + {d2.capitalize()} [{item['severity']} | {item['system']}]")
+            lines.append(f"   Effekt: {item['effect']}")
+            lines.append(f"   Details: {item['mechanism']}")
+            advice = get_practical_advice(item.get("effect", ""), item.get("mechanism", ""), item.get("system", ""))
+            if advice:
+                lines.append(f"   Empfehlung: {advice}")
+    lines.append("")
+
+    if monitoring_params:
+        lines.append("3. Empfohlene Laborkontrollen & Diagnostik:")
+        for param in monitoring_params:
+            lines.append(f"* {param}")
+        lines.append("")
+
+    lines.append("4. Leitfragen fuer das Arztgespraech:")
+    lines.append("- Gibt es schonendere Alternativen?")
+    lines.append("- Sollten die empfohlenen Laborparameter kontrolliert werden?")
+    lines.append("- Koennen Einnahmeabstaende angepasst werden?")
+    lines.append("\nHaftungsausschluss: Dient ausschliesslich zur Gespraechsvorbereitung. Keine Therapieempfehlung.")
+    return "\n".join(lines).encode("utf-8")
+
+
+def create_pdf_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params):
+    """Erzeugt einen sauberen PDF-Report (faellt bei DLL-Blockaden auf Text zurueck)."""
+    if not FPDF_AVAILABLE:
+        return generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params)
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -626,13 +701,35 @@ if monitoring_list:
     </div>
     """, unsafe_allow_html=True)
 
+# ----------------- Pharmakologische Wirkstoff-Profile -----------------
+if len(active_substances) > 0:
+    with st.expander("🧬 Pharmakologische Wirkstoff-Profile (Elimination, Metabolisierung & Klasse)", expanded=False):
+        st.caption("Kompakte pharmakologische Kenndaten zur renalen/hepatischen Belastung und Enzymwegen.")
+        for d in active_substances:
+            pharm = get_drug_pharmacology(d)
+            if pharm:
+                st.markdown(f"""
+                <div class="profile-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <h4 style="margin: 0; color: #0f172a;">{pharm['name'].capitalize()}</h4>
+                        <span class="status-badge badge-organ">ATC: {pharm['atc_code']}</span>
+                    </div>
+                    <p style="margin: 3px 0; font-size: 0.90rem; color: #334155;"><strong>Wirkstoffklasse:</strong> {pharm['drug_class']}</p>
+                    <p style="margin: 3px 0; font-size: 0.90rem; color: #334155;"><strong>Primäres Organsystem:</strong> {pharm['organ_system']}</p>
+                    <p style="margin: 3px 0 0 0; font-size: 0.88rem; color: #64748b;"><strong>Elimination & Metabolisierung:</strong> {pharm['metabolism']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
 if len(active_substances) >= 2:
-    pdf_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list)
+    report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list)
+    file_ext = "pdf" if FPDF_AVAILABLE else "txt"
+    mime_type = "application/pdf" if FPDF_AVAILABLE else "text/plain"
+    
     st.download_button(
-        label="📄 Gesprächsleitfaden für das nächste Arztgespräch als PDF herunterladen",
-        data=pdf_bytes,
-        file_name="MediCheck_Arzt_Gespraechsleitfaden.pdf",
-        mime="application/pdf",
+        label="📄 Gesprächsleitfaden für das nächste Arztgespräch herunterladen",
+        data=report_bytes,
+        file_name=f"MediCheck_Arzt_Gespraechsleitfaden.{file_ext}",
+        mime=mime_type,
         use_container_width=True
     )
 

@@ -56,9 +56,7 @@ def init_db():
             )
         """)
 
-        # Neue Kern-Klassenregeln hinterlegen
         CORE_CLASS_RULES = [
-            # 1. Opioide + Benzodiazepine (FDA Black Box)
             ("N02A", "N05BA", "Opioide", "Benzodiazepine", "Hoch", "Zentralnervensystem / Atmung",
              "Lebensbedrohliche Atemdepression, Koma und letale Sedierung.",
              "Synergistische zentralnervöse Dämpfung an mu-Opioid- und GABAA-Rezeptoren."),
@@ -68,21 +66,15 @@ def init_db():
             ("N02A", "N05CF", "Opioide", "Z-Substanzen (Hypnotika)", "Hoch", "Zentralnervensystem / Atmung",
              "Ausgepraegte Sedierung und erhoehtes Atemstillstandrisiko.",
              "Additive Verstärkung inhibitorischer GABAerger und opioider Signalwege."),
-
-            # 2. Digitalis + P-gp-Hemmer / Verapamil / Amiodaron
             ("C01AA", "C08D", "Digitalisglykoside", "Calciumantagonisten (Verapamil/Diltiazem)", "Hoch", "Kardiovaskulaer / Rhythmus",
              "Digoxin-Intoxikation mit AV-Block und ventrikulaeren Arrhythmien.",
              "Hemmung des renalen und biliaeren P-Glykoprotein-Transporters erhoeht Digoxin-Spiegel um 50-100%."),
             ("C01AA", "C01BD", "Digitalisglykoside", "Klasse-III-Antiarrhythmika (Amiodaron)", "Hoch", "Kardiovaskulaer / Rhythmus",
              "Akute Digitalistoxizitaet und Bradykardie.",
              "Amiodaron inhibiert P-gp-vermittelten renalen Digoxintransport signifikant."),
-
-            # 3. SSRI + Antikoagulanzien / Thrombozytenaggregationshemmer
             ("N06AB", "B01A", "SSRI-Antidepressiva", "Antithrombotika (DOAK/VKA/ASS)", "Moderat", "Haemostase / Gastrointestinal",
              "Verdopplung bis Verdreifachung des oberen Magen-Darm-Blutungsrisikos.",
              "SSRI blockieren den SERT-Transporter auf Thrombozyten und entleeren deren Serotoningranula, was die Blutstillung beeintraechtigt."),
-
-            # 4. RAAS-Blockade + Kaliumsparende Diuretika
             ("C09A", "C03D", "ACE-Hemmer", "Kaliumsparende Diuretika (Aldosteron-Antagonisten)", "Hoch", "Elektrolyte & Herz",
              "Schwere, potenziell toedliche Hyperkaliaemie.",
              "Synergistische Hemmung der renalen Kaliumausscheidung."),
@@ -109,13 +101,13 @@ init_db()
 
 
 def get_cache_key(drug_a, drug_b):
-    """Sortiert zwei Wirkstoffnamen alphabetisch fuer einen konsistenten Primaerschluessel."""
+    """Sortiert zwei Wirkstoffnamen alphabetisch."""
     sorted_pair = sorted([drug_a.strip().lower(), drug_b.strip().lower()])
     return f"{sorted_pair[0]}___{sorted_pair[1]}"
 
 
 def check_cache(drug_a, drug_b):
-    """Stufe 1: Direkter Cache-Lookup fuer zuvor gepruefte Einzelpaare."""
+    """Stufe 1: Direkter Cache-Lookup."""
     key = get_cache_key(drug_a, drug_b)
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
@@ -138,10 +130,7 @@ def check_cache(drug_a, drug_b):
 
 
 def get_all_atc_codes(drug_name):
-    """
-    Ermittelt alle hinterlegten ATC- oder Phyto-Codes fuer eine Substanz.
-    Priorisiert systemische Darreichungen vor lokalen Formen (S, D).
-    """
+    """Ermittelt alle hinterlegten ATC- oder Phyto-Codes fuer eine Substanz."""
     if not drug_name:
         return []
 
@@ -192,10 +181,45 @@ def get_atc_code(drug_name):
     return codes[0] if codes else None
 
 
+def get_drug_pharmacology(drug_name):
+    """
+    Liest pharmakologische Details (Klasse, Organ, Metabolisierung/Elimination)
+    fuer eine gegebene Substanz aus der Datenbank aus.
+    """
+    if not drug_name:
+        return None
+
+    clean = drug_name.strip()
+    clean_no_emoji = re.sub(r'[\U00010000-\U0010ffff]', '', clean).strip()
+    search_terms = [clean, clean_no_emoji]
+    if "(" in clean and ")" in clean:
+        inside = clean[clean.find("(") + 1:clean.find(")")].strip()
+        search_terms.extend([inside, clean.split("(")[0].strip()])
+
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        for term in search_terms:
+            cursor.execute("""
+                SELECT name, atc_code, drug_class, organ_system, metabolism
+                FROM "drugs"
+                WHERE name = ? COLLATE NOCASE OR name LIKE ? COLLATE NOCASE
+                LIMIT 1
+            """, (term, f"{term}%"))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "name": row[0],
+                    "atc_code": row[1],
+                    "drug_class": row[2] if row[2] else "Standard-Wirkstoff",
+                    "organ_system": row[3] if row[3] else "Systemisch",
+                    "metabolism": row[4] if row[4] else "Renal / Hepatisch"
+                }
+
+    return None
+
+
 def check_phytomed_rules(drug_a, drug_b):
-    """
-    Prueft Interaktionen zwischen Phytopharmaka/Kationen und Arzneistoffen.
-    """
+    """Prueft Interaktionen zwischen Phytopharmaka/Kationen und Arzneistoffen."""
     codes_a = get_all_atc_codes(drug_a)
     codes_b = get_all_atc_codes(drug_b)
 
@@ -229,7 +253,7 @@ def check_phytomed_rules(drug_a, drug_b):
 
 
 def check_class_rules(drug_a, drug_b):
-    """Stufe 2b: Prueft ATC-Gruppeninteraktionen zwischen zwei chemischen Wirkstoffen."""
+    """Stufe 2b: Prueft ATC-Gruppeninteraktionen."""
     codes_a = get_all_atc_codes(drug_a)
     codes_b = get_all_atc_codes(drug_b)
 
@@ -303,7 +327,7 @@ def check_multidrug_synergies(drug_list):
             "mechanism": "Synergistische Hemmung der myokardialen Kaliumkanaele (hERG/IKr) verzoegert die ventrikulaere Repolarisation."
         })
 
-    # 3. ZNS-Depression (Sedativa + Opioide)
+    # 3. ZNS-Depression
     zns_depressant_drugs = []
     for d, codes in atc_map.items():
         if any(c.startswith("N02A") or c.startswith("N05B") or 
