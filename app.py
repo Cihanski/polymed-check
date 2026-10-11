@@ -1,6 +1,7 @@
 import os
 os.environ["FONTTOOLS_DONT_USE_CYTHON"] = "1"
 
+import json
 import streamlit as st
 import streamlit.components.v1 as components
 import requests
@@ -8,7 +9,6 @@ import re
 from itertools import combinations
 from datetime import datetime
 
-# Sicherer Import fuer FPDF
 FPDF_AVAILABLE = False
 try:
     from fpdf import FPDF
@@ -220,7 +220,6 @@ st.markdown("""
         margin-top: 30px;
     }
 
-    /* ----------------- NATIVES PRINT-CSS (DIN A4 OPTIMIERT) ----------------- */
     @media print {
         header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {
             display: none !important;
@@ -332,6 +331,314 @@ def get_aggregated_monitoring(active_drugs, detected_interactions, synergies):
         params.add("Therapeutisches Drug Monitoring (TDM): Serum-Digoxin-Talspiegel (Serumkonzentration)")
 
     return sorted(list(params))
+
+
+def render_interaction_network(active_substances, detected_interactions, synergies):
+    """Erzeugt ein 2-Spalten Split-Panel mit fester Hoehe und vollstaendiger Legende."""
+    nodes = []
+    edges = []
+
+    high_risk_drugs = set()
+    mod_risk_drugs = set()
+
+    for item in detected_interactions:
+        d1, d2 = item["pair"]
+        sev = item.get("severity", "Moderat")
+        if sev == "Hoch":
+            high_risk_drugs.add(d1)
+            high_risk_drugs.add(d2)
+        else:
+            mod_risk_drugs.add(d1)
+            mod_risk_drugs.add(d2)
+
+    for syn in synergies:
+        for d in syn.get("drugs", []):
+            if syn.get("severity") == "Hoch":
+                high_risk_drugs.add(d)
+            else:
+                mod_risk_drugs.add(d)
+
+    for d in active_substances:
+        clean_name = d.replace(" 🍊", "").replace(" 🥛", "").replace(" 🌿", "").replace(" 🩸", "").replace(" 🍬", "").replace(" 🍂", "").replace(" 🍃", "").replace(" 🧄", "").capitalize()
+        pharm = get_drug_pharmacology(d)
+        
+        sub_class = "Wirkstoff"
+        d_low = d.lower()
+        if "ramipril" in d_low: sub_class = "ACE-Hemmer"
+        elif "torasemid" in d_low or "furosemid" in d_low: sub_class = "Diuretikum"
+        elif "ibuprofen" in d_low or "diclofenac" in d_low: sub_class = "NSAR"
+        elif "simvastatin" in d_low: sub_class = "Statin"
+        elif "metformin" in d_low: sub_class = "Biguanid"
+        elif "ciprofloxacin" in d_low: sub_class = "Antibiotikum"
+        elif pharm and pharm.get("drug_class") and "WHO-ATC" not in pharm.get("drug_class"):
+            sub_class = pharm["drug_class"][:14]
+
+        if d in high_risk_drugs:
+            bg_color = "#dc2626"
+            border_color = "#f87171"
+            glow_color = "rgba(220, 38, 38, 0.45)"
+        elif d in mod_risk_drugs:
+            bg_color = "#d97706"
+            border_color = "#fbbf24"
+            glow_color = "rgba(217, 119, 6, 0.45)"
+        else:
+            bg_color = "#059669"
+            border_color = "#34d399"
+            glow_color = "rgba(5, 150, 105, 0.35)"
+
+        nodes.append({
+            "id": d,
+            "label": f"💊 {clean_name}\n({sub_class})",
+            "shape": "box",
+            "margin": {"top": 8, "bottom": 8, "left": 14, "right": 14},
+            "borderRadius": 8,
+            "color": {
+                "background": bg_color,
+                "border": border_color,
+                "highlight": {"background": "#0284c7", "border": "#38bdf8"}
+            },
+            "font": {
+                "color": "#ffffff",
+                "size": 13,
+                "face": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                "bold": True
+            },
+            "borderWidth": 2,
+            "shadow": {"enabled": True, "color": glow_color, "size": 10, "x": 0, "y": 3}
+        })
+
+    edge_details_map = {}
+    first_edge_id = None
+    for idx, item in enumerate(detected_interactions):
+        d1, d2 = item["pair"]
+        sev = item.get("severity", "Moderat")
+        is_high = sev == "Hoch"
+        edge_id = f"edge_{idx}"
+        if first_edge_id is None:
+            first_edge_id = edge_id
+
+        edge_details_map[edge_id] = {
+            "pair": f"{d1.capitalize()} + {d2.capitalize()}",
+            "severity": sev,
+            "system": item.get("system", "Allgemein"),
+            "effect": item.get("effect", ""),
+            "mechanism": item.get("mechanism", "")
+        }
+
+        edges.append({
+            "id": edge_id,
+            "from": d1,
+            "to": d2,
+            "color": {
+                "color": "#ef4444" if is_high else "#f59e0b",
+                "highlight": "#38bdf8"
+            },
+            "width": 3.5 if is_high else 2.5,
+            "dashes": [6, 6] if not is_high else False,
+            "smooth": {"type": "curvedCW", "roundness": 0.15}
+        })
+
+    nodes_json = json.dumps(nodes)
+    edges_json = json.dumps(edges)
+    edge_details_json = json.dumps(edge_details_map)
+    default_edge_id = json.dumps(first_edge_id)
+
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+      <style>
+        * {{
+          box-sizing: border-box;
+        }}
+        body {{
+          margin: 0;
+          padding: 0;
+          background-color: transparent;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          user-select: none;
+        }}
+        #dashboard-split {{
+          display: flex;
+          gap: 16px;
+          width: 100%;
+          min-height: 410px;
+        }}
+        #radar-container {{
+          flex: 1.6;
+          display: flex;
+          flex-direction: column;
+          border: 1px solid #1e293b;
+          border-radius: 12px;
+          background-color: #090d16;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+          overflow: hidden;
+        }}
+        #network {{
+          width: 100%;
+          height: 355px;
+          background-color: #090d16;
+          background-image: 
+            radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.35) 0%, rgba(9, 13, 22, 1) 100%),
+            linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+          background-size: 100% 100%, 28px 28px, 28px 28px;
+        }}
+        .legend-bar {{
+          display: flex;
+          justify-content: space-around;
+          align-items: center;
+          height: 48px;
+          padding: 0 16px;
+          background-color: #030712;
+          border-top: 1px solid #1e293b;
+          font-size: 12.5px;
+          color: #cbd5e1;
+        }}
+        .dot {{
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          display: inline-block;
+          margin-right: 6px;
+        }}
+        #detail-panel {{
+          flex: 1.4;
+          border: 1px solid #334155;
+          border-radius: 12px;
+          background: #0f172a;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+          padding: 22px 24px;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          min-height: 410px;
+          overflow-y: auto;
+        }}
+        .panel-badge {{
+          align-self: flex-start;
+          font-size: 11.5px;
+          font-weight: 700;
+          padding: 4px 12px;
+          border-radius: 9999px;
+          text-transform: uppercase;
+          margin-bottom: 12px;
+        }}
+        .badge-red {{ background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }}
+        .badge-yellow {{ background: #78350f; color: #fef3c7; border: 1px solid #f59e0b; }}
+        .badge-blue {{ background: #0c4a6e; color: #bae6fd; border: 1px solid #0284c7; }}
+        .panel-title {{
+          font-size: 19px;
+          font-weight: 700;
+          color: #ffffff;
+          margin: 0 0 12px 0;
+          line-height: 1.3;
+        }}
+        .panel-desc {{
+          font-size: 14px;
+          line-height: 1.6;
+          color: #e2e8f0;
+          margin: 0 0 16px 0;
+        }}
+        .panel-hint {{
+          font-size: 12px;
+          color: #94a3b8;
+          border-top: 1px solid #1e293b;
+          padding-top: 12px;
+          margin-top: auto;
+        }}
+      </style>
+    </head>
+    <body>
+      <div id="dashboard-split">
+        <div id="radar-container">
+          <div id="network"></div>
+          <div class="legend-bar">
+            <span><span class="dot" style="background:#ef4444; box-shadow:0 0 6px #ef4444;"></span><strong>Hohes Risiko</strong> (Klinisch kritisch)</span>
+            <span><span class="dot" style="background:#f59e0b; box-shadow:0 0 6px #f59e0b;"></span><strong>Moderates Risiko</strong> (Monitoring nötig)</span>
+            <span><span class="dot" style="background:#10b981; box-shadow:0 0 6px #10b981;"></span><strong>Kein Risiko</strong> (Unbedenklich)</span>
+          </div>
+        </div>
+
+        <div id="detail-panel">
+          <span id="p-badge" class="panel-badge badge-blue">Klinische Inspektion</span>
+          <h3 id="p-title" class="panel-title">Interaktions-Radar</h3>
+          <p id="p-desc" class="panel-desc">Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.</p>
+          <div class="panel-hint">💡 <em>Knoten lassen sich mit der Maus bewegen und zoomen.</em></div>
+        </div>
+      </div>
+
+      <script type="text/javascript">
+        var nodes = new vis.DataSet({nodes_json});
+        var edges = new vis.DataSet({edges_json});
+        var edgeMap = {edge_details_json};
+        var defaultEdge = {default_edge_id};
+
+        var container = document.getElementById('network');
+        var pBadge = document.getElementById('p-badge');
+        var pTitle = document.getElementById('p-title');
+        var pDesc = document.getElementById('p-desc');
+
+        var data = {{ nodes: nodes, edges: edges }};
+        
+        var options = {{
+          physics: {{
+            stabilization: {{ iterations: 200 }},
+            barnesHut: {{
+              gravitationalConstant: -4500,
+              centralGravity: 0.7,
+              springLength: 110,
+              springConstant: 0.05,
+              avoidOverlap: 0.85
+            }}
+          }},
+          interaction: {{
+            hover: true,
+            zoomView: true,
+            dragView: true
+          }}
+        }};
+
+        var network = new vis.Network(container, data, options);
+        network.once('stabilizationIterationsDone', function() {{
+          network.fit({{ animation: {{ duration: 300 }} }});
+          
+          if (defaultEdge && edgeMap[defaultEdge]) {{
+            showEdgeDetails(edgeMap[defaultEdge]);
+          }}
+        }});
+
+        function showEdgeDetails(detail) {{
+          var isHigh = detail.severity === "Hoch";
+          pBadge.className = "panel-badge " + (isHigh ? "badge-red" : "badge-yellow");
+          pBadge.innerText = detail.severity + " • " + detail.system;
+          pTitle.innerText = detail.pair;
+          pDesc.innerText = detail.effect + (detail.mechanism ? " " + detail.mechanism : "");
+        }}
+
+        network.on("click", function(params) {{
+          if (params.edges.length > 0) {{
+            var edgeId = params.edges[0];
+            var detail = edgeMap[edgeId];
+            if (detail) {{
+              showEdgeDetails(detail);
+              return;
+            }}
+          }}
+          if (params.nodes.length > 0) {{
+            var nodeId = params.nodes[0];
+            pBadge.className = "panel-badge badge-blue";
+            pBadge.innerText = "Wirkstoff-Fokus";
+            pTitle.innerText = nodeId.toUpperCase();
+            pDesc.innerText = "Dieser Wirkstoff ist im Netzwerk aktiv. Klicken Sie auf eine verbundene Farblinie, um die genaue Wechselwirkung mit der Partnersubstanz einzusehen.";
+          }}
+        }});
+      </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=440)
 
 
 @st.cache_data(ttl=3600)
@@ -527,7 +834,7 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
         pdf.set_text_color(20, 20, 20)
     
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, clean_text_for_pdf("3. Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf(f"3. Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
     
     if len(interactions) == 0:
         pdf.set_font("Helvetica", size=10)
@@ -586,7 +893,6 @@ st.markdown("""
 
 st.caption(f"Arzneistoffkatalog: **{len(all_available_options):,} Substanzen & Nahrungsmittel**. Regelwerk: **{total_rules} aktive Klassen- & Phyto-Regeln** + **{total_db} Einzelwechselwirkungen**.")
 
-# ----------------- Patientenprofil -----------------
 with st.expander("👤 Patientenprofil & Sonderpopulationen (Optional: Alter & Nierenfunktion)", expanded=False):
     col_pat1, col_pat2 = st.columns(2)
     with col_pat1:
@@ -617,7 +923,6 @@ selected_drugs = st.multiselect(
     help="Erkennt Einzelwirkstoffe, Markennamen und spaltet Fixkombinationen automatisch auf."
 )
 
-# ----------------- Aufspaltung von Kombinationspraeparaten -----------------
 active_substances = []
 combo_details = {}
 
@@ -643,7 +948,6 @@ if combo_details:
     </div>
     """, unsafe_allow_html=True)
 
-# ----------------- Differenzierung: Darreichung & Dosis -----------------
 drug_settings = {}
 has_configurable_drugs = any(
     any(k in d.lower() for k in ["diclofenac", "ibuprofen", "acetylsalicyl", "aspirin", "hydrocortison"])
@@ -688,7 +992,6 @@ if has_configurable_drugs:
                     drug_settings[d] = mode
                     col_idx += 1
 
-# ----------------- Wechselwirkungsanalyse -----------------
 detected_interactions = []
 if len(active_substances) >= 2:
     with st.spinner("Analysiere Wechselwirkungen..."):
@@ -794,7 +1097,6 @@ with col3:
 if is_triple_whammy:
     st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + orales NSAR drosseln die glomeruläre Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
 
-# Priscus 2.0 Warnungen
 for p in priscus_alerts:
     st.markdown(f"""
     <div class="priscus-card">
@@ -805,7 +1107,6 @@ for p in priscus_alerts:
     </div>
     """, unsafe_allow_html=True)
 
-# Nierenfunktions-Warnungen
 for r in renal_alerts:
     st.markdown(f"""
     <div class="renal-card">
@@ -825,7 +1126,11 @@ for syn in multidrug_synergies:
     </div>
     """, unsafe_allow_html=True)
 
-# ----------------- Einnahme-Tageszeitplaner -----------------
+if len(active_substances) >= 2:
+    with st.expander("🕸️ Interaktives Interaktions-Netzwerk (Graph-Visualisierung)", expanded=True):
+        st.caption("Visuelle Vernetzung der Wirkstoff-Beziehungen. Knoten lassen sich ziehen und zoomen.")
+        render_interaction_network(active_substances, detected_interactions, multidrug_synergies)
+
 if intake_schedule:
     schedule_html = ""
     for time_slot, items in intake_schedule.items():
@@ -841,7 +1146,6 @@ if intake_schedule:
     </div>
     """, unsafe_allow_html=True)
 
-# ----------------- Labor- & Diagnostik-Ampel -----------------
 monitoring_list = get_aggregated_monitoring(active_substances, detected_interactions, multidrug_synergies)
 if monitoring_list:
     st.markdown(f"""
@@ -856,7 +1160,6 @@ if monitoring_list:
     </div>
     """, unsafe_allow_html=True)
 
-# ----------------- Pharmakologische Wirkstoff-Profile -----------------
 if len(active_substances) > 0:
     with st.expander("🧬 Pharmakologische Wirkstoff-Profile (Elimination, Metabolisierung & Klasse)", expanded=False):
         st.caption("Kompakte pharmakologische Kenndaten zur renalen/hepatischen Belastung und Enzymwegen.")
@@ -875,7 +1178,6 @@ if len(active_substances) > 0:
                 </div>
                 """, unsafe_allow_html=True)
 
-# ----------------- Export- & Druckbereich -----------------
 if len(active_substances) >= 1:
     report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list, priscus_alerts, renal_alerts, intake_schedule)
     file_ext = "pdf" if FPDF_AVAILABLE else "txt"

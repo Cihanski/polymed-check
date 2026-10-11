@@ -463,61 +463,91 @@ def check_class_rules(drug_a, drug_b):
     return None
 
 
-def check_multidrug_synergies(drug_list):
+def check_multidrug_synergies(active_drugs):
+    """
+    Erkennt pharmakodynamische Synergien (z.B. kumulative QT-Verlängerung,
+    anticholinerge Last, ZNS-/Atemdepression) bei multiplen Arzneistoffen.
+    """
     synergies = []
-    atc_map = {d: get_all_atc_codes(d) for d in drug_list}
+    if len(active_drugs) < 2:
+        return synergies
 
-    # 1. Anticholinerge Last
-    anticholinergic_drugs = []
-    for d, codes in atc_map.items():
-        if any(c.startswith("N06AA") or c.startswith("G04BD") or 
-               c.startswith("R06AA") or c.startswith("R06AB") or 
-               c.startswith("N05AA") for c in codes):
-            anticholinergic_drugs.append(d)
+    # Hilfsfunktion zur flexiblen Namensprüfung (erkennt sowohl INN als auch DE-Namen)
+    def match_substance(drug_name, target_keywords):
+        d_lower = drug_name.lower()
+        return any(k.lower() in d_lower for k in target_keywords)
 
-    if len(anticholinergic_drugs) >= 2:
-        synergies.append({
-            "type": "Anticholinerge Last",
-            "drugs": anticholinergic_drugs,
-            "severity": "Hoch" if len(anticholinergic_drugs) >= 3 else "Moderat",
-            "title": f"Kumulative anticholinerge Last ({len(anticholinergic_drugs)} Substanzen)",
-            "effect": "Stark erhoehtes Risiko fuer kognitive Stoerungen, akute Verwirrtheit, Delir, Stuerze, Obstipation und Harnverhalt.",
-            "mechanism": "Additive Blockade zentraler und peripherer Muskarinrezeptoren durch gleichzeitige Einnahme mehrerer anticholinerg wirksamer Wirkstoffe."
-        })
+    # 1. Kardiale QT-Verlängerung
+    qt_keywords = [
+        "ciprofloxacin", "levofloxacin", "moxifloxacin", 
+        "amiodaron", "amiodarone", "sotalol", "dronedaron", "dronedarone",
+        "clarithromycin", "erythromycin", "azithromycin",
+        "haloperidol", "citalopram", "escitalopram", "methadon", "methadone"
+    ]
+    
+    matched_qt = []
+    for d in active_drugs:
+        atc_codes = get_all_atc_codes(d)
+        is_qt_atc = any(c.startswith("C01B") or c.startswith("J01MA") or c.startswith("N05A") for c in atc_codes)
+        if match_substance(d, qt_keywords) or is_qt_atc:
+            if d not in matched_qt:
+                matched_qt.append(d)
 
-    # 2. QT-Verlaengerung
-    qt_prolonging_drugs = []
-    for d, codes in atc_map.items():
-        if any(c.startswith("J01FA") or c.startswith("J01MA") or 
-               c.startswith("C01B") or c.startswith("N05A") or 
-               c.startswith("N06AB") for c in codes):
-            qt_prolonging_drugs.append(d)
-
-    if len(qt_prolonging_drugs) >= 2:
+    if len(matched_qt) >= 2:
         synergies.append({
             "type": "Kardiale QT-Verlaengerung",
-            "drugs": qt_prolonging_drugs,
+            "title": "Kumulatives Torsade-de-Pointes-Risiko (QT-Verlaengerung)",
             "severity": "Hoch",
-            "title": f"Kumulative QT-Zeit-Verlaengerung ({len(qt_prolonging_drugs)} Substanzen)",
-            "effect": "Kritisches Risiko fuer Torsade-de-Pointes-Arrhythmien und ploetzlichen Herztod.",
-            "mechanism": "Synergistische Hemmung der myokardialen Kaliumkanaele (hERG/IKr) verzoegert die ventrikulaere Repolarisation."
+            "drugs": matched_qt,
+            "effect": "Gleichzeitige Gabe mehrerer QT-verlaengernder Arzneistoffe erhoeht das Risiko ventrikulaerer Tachyarrhythmien drastisch.",
+            "mechanism": "Additive Blockade des kardialen hERG-Kaliumkanaels (IKr-Strom) waehrend der myokardialen Repolarisationsphase."
         })
 
-    # 3. ZNS-Depression
-    zns_depressant_drugs = []
-    for d, codes in atc_map.items():
-        if any(c.startswith("N02A") or c.startswith("N05B") or 
-               c.startswith("N05C") or c.startswith("N03AE") for c in codes):
-            zns_depressant_drugs.append(d)
+    # 2. Anticholinerge Last
+    anticholinergic_keywords = [
+        "amitriptylin", "amitriptyline", "doxepin", "nortriptylin",
+        "oxybutynin", "tolterodin", "solifenacin", "darifenacin",
+        "diphenhydramin", "dimenhydrinat", "promethazin", "clozapin"
+    ]
+    matched_anti = []
+    for d in active_drugs:
+        atc_codes = get_all_atc_codes(d)
+        is_anti_atc = any(c.startswith("N06AA") or c.startswith("G04BD") for c in atc_codes)
+        if match_substance(d, anticholinergic_keywords) or is_anti_atc:
+            if d not in matched_anti:
+                matched_anti.append(d)
 
-    if len(zns_depressant_drugs) >= 2:
+    if len(matched_anti) >= 2:
+        synergies.append({
+            "type": "Anticholinerge Last",
+            "title": "Hohe kumulative anticholinerge Last",
+            "severity": "Moderat",
+            "drugs": matched_anti,
+            "effect": "Verstaerkung anticholinerger Nebenwirkungen: Mundtrockenheit, Obstipation, Harnverhalt, Verwirrtheitszustaende und erhoehtes Sturzrisiko.",
+            "mechanism": "Kompetitive Antagonisierung zentraler und peripherer Muskarinrezeptoren (M1-M5)."
+        })
+
+    # 3. ZNS- & Atemdepression
+    sedative_keywords = [
+        "morphin", "morphine", "fentanyl", "oxycodon", "oxycodone", "tilidin", "tramadol",
+        "diazepam", "lorazepam", "oxazepam", "zolpidem", "zopiclon"
+    ]
+    matched_sed = []
+    for d in active_drugs:
+        atc_codes = get_all_atc_codes(d)
+        is_sed_atc = any(c.startswith("N02A") or c.startswith("N05BA") or c.startswith("N05CF") for c in atc_codes)
+        if match_substance(d, sedative_keywords) or is_sed_atc:
+            if d not in matched_sed:
+                matched_sed.append(d)
+
+    if len(matched_sed) >= 2:
         synergies.append({
             "type": "Kumulative ZNS-Depression",
-            "drugs": zns_depressant_drugs,
+            "title": "Verstaerkte Sedierung & Atemdepression",
             "severity": "Hoch",
-            "title": f"Kumulative ZNS- & Atemdepression ({len(zns_depressant_drugs)} Substanzen)",
-            "effect": "Gefahr exzessiver Sedierung, schwerer Koordinationsstoerungen, Stuerzen und potentiell letaler Hypoventilation.",
-            "mechanism": "Synergistische zentralnervöse Daempfung ueber erhoehte GABAerge Transmission und mu-Opioid-Rezeptoraktivierung."
+            "drugs": matched_sed,
+            "effect": "Potenzierte ZNS-Daempfung, erhoehte Sturzgefahr und kritisches Risiko einer zentralen Atemdepression.",
+            "mechanism": "Synergistische Daempfung des Atemzentrums ueber GABA_A- und mu-Opioid-Rezeptor-Signalwege."
         })
 
     return synergies
