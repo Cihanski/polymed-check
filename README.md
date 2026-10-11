@@ -2,6 +2,10 @@
 
 
 
+\[!\[MediCheck CI Pipeline](https://github.com/Cihanski/polymed-check/actions/workflows/ci.yml/badge.svg)](https://github.com/Cihanski/polymed-check/actions/workflows/ci.yml)
+
+
+
 \*\*MediCheck\*\* ist ein evidenzbasiertes, klinisches Entscheidungsunterstützungssystem (Clinical Decision Support System, CDSS) zur Analyse komplexer Polymedikationsregime, arzneimittelbezogener Probleme (DRPs) und lebensmittelbedingter Interaktionen.
 
 
