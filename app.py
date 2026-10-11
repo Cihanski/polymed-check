@@ -20,6 +20,8 @@ from cache_manager import (
     check_phytomed_rules,
     check_class_rules, 
     check_multidrug_synergies,
+    check_priscus_pim,
+    check_renal_risks,
     get_all_atc_codes,
     get_drug_pharmacology,
     save_to_cache, 
@@ -142,6 +144,22 @@ st.markdown("""
         padding: 14px 18px;
         margin-bottom: 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .priscus-card {
+        background-color: #fefce8;
+        border: 1px solid #fef08a;
+        border-left: 6px solid #ca8a04;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    }
+    .renal-card {
+        background-color: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-left: 6px solid #ea580c;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
     }
     .monitoring-card {
         background-color: #f0f9ff;
@@ -332,7 +350,7 @@ def find_interaction_smart(drug_a, drug_b):
     return None
 
 
-def generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params):
+def generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts):
     """Fallback-Report als formatierter Text, falls FPDF blockiert wird."""
     lines = []
     lines.append("=" * 70)
@@ -348,12 +366,16 @@ def generate_text_report(selected_drugs, active_substances, drug_settings, inter
         lines.append(f"- {d}{inn_info}{setting_info}")
     lines.append("")
 
-    if is_triple or synergies:
-        lines.append("WARNUNG: Kumulative Mehrfach-Risiken (Multi-Drug Synergien):")
+    if is_triple or synergies or priscus_alerts or renal_alerts:
+        lines.append("WARNUNG: Klinische Risiken & Sonderpopulationen:")
         if is_triple:
             lines.append("- Triple-Whammy: RAAS-Hemmer + Diuretikum + NSAR (systemisch) -> Akute Nierenbelastung")
         for syn in synergies:
             lines.append(f"- {syn['title']}: {syn['effect']}")
+        for p in priscus_alerts:
+            lines.append(f"- Priscus 2.0 PIM ({p['drug'].capitalize()}): {p['risk']} Alternative: {p['alternative']}")
+        for r in renal_alerts:
+            lines.append(f"- Nierenfunktion ({r['drug'].capitalize()}): {r['message']}")
         lines.append("")
 
     lines.append(f"2. Gefundene Einzelwechselwirkungen ({len(interactions)} Befunde):")
@@ -384,10 +406,10 @@ def generate_text_report(selected_drugs, active_substances, drug_settings, inter
     return "\n".join(lines).encode("utf-8")
 
 
-def create_pdf_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params):
-    """Erzeugt einen sauberen PDF-Report (faellt bei DLL-Blockaden auf Text zurueck)."""
+def create_pdf_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts):
+    """Erzeugt einen sauberen PDF-Report inklusive Priscus- und Nierenrisiken."""
     if not FPDF_AVAILABLE:
-        return generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params)
+        return generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts)
 
     pdf = FPDF()
     pdf.add_page()
@@ -417,11 +439,11 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
         pdf.cell(width, 6, clean_text_for_pdf(f"- {d}{inn_info}{setting_info}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     
-    if is_triple or synergies:
+    if is_triple or synergies or priscus_alerts or renal_alerts:
         pdf.set_fill_color(254, 226, 226)
         pdf.set_text_color(153, 27, 27)
         pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(width, 8, clean_text_for_pdf(" WARNUNG: Kumulative Mehrfach-Risiken (Multi-Drug Synergien):"), fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(width, 8, clean_text_for_pdf(" WARNUNG: Klinische Risiken & Sonderpopulationen:"), fill=True, new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=9)
         
         if is_triple:
@@ -429,6 +451,12 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
         
         for syn in synergies:
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"- {syn['title']}: {syn['effect']}"), fill=True, new_x="LMARGIN", new_y="NEXT")
+            
+        for p in priscus_alerts:
+            pdf.multi_cell(width, 5, clean_text_for_pdf(f"- Priscus 2.0 PIM ({p['drug'].capitalize()}): {p['risk']} Alternative: {p['alternative']}"), fill=True, new_x="LMARGIN", new_y="NEXT")
+
+        for r in renal_alerts:
+            pdf.multi_cell(width, 5, clean_text_for_pdf(f"- Nierenfunktion ({r['drug'].capitalize()}): {r['message']}"), fill=True, new_x="LMARGIN", new_y="NEXT")
         
         pdf.ln(4)
         pdf.set_text_color(20, 20, 20)
@@ -499,6 +527,23 @@ st.markdown("""
 
 st.caption(f"Arzneistoffkatalog: **{len(all_available_options):,} Substanzen & Nahrungsmittel**. Regelwerk: **{total_rules} aktive Klassen- & Phyto-Regeln** + **{total_db} Einzelwechselwirkungen**.")
 
+# ----------------- Patientenprofil (Alter & Nierenfunktion) -----------------
+with st.expander("👤 Patientenprofil & Sonderpopulationen (Optional: Alter & Nierenfunktion)", expanded=False):
+    col_pat1, col_pat2 = st.columns(2)
+    with col_pat1:
+        patient_age = st.number_input("Patientenalter (Jahre):", min_value=1, max_value=120, value=68, step=1)
+        is_elderly = patient_age >= 65
+        if is_elderly:
+            st.caption("👴 Altersgruppe $\\ge 65$ Jahre: Prüfung gegen **Priscus 2.0 (PIM)** aktiv.")
+    with col_pat2:
+        egfr_value = st.slider("Geschätzte Nierenfunktion (eGFR in ml/min/1.73 m²):", min_value=10, max_value=120, value=90, step=5)
+        if egfr_value < 30:
+            st.caption("🔴 **Schwere Niereninsuffizienz** (Stadium G4/G5)")
+        elif egfr_value < 60:
+            st.caption("🟡 **Moderate Niereninsuffizienz** (Stadium G3)")
+        else:
+            st.caption("🟢 **Normale bis leicht eingeschränkte Nierenfunktion** (Stadium G1/G2)")
+
 default_selection = [
     "Milchprodukte & Calciumreiches Wasser 🥛",
     "Ciprofloxacin"
@@ -509,7 +554,7 @@ selected_drugs = st.multiselect(
     label="Wählen oder suchen Sie Wirkstoffe, Phytopharmaka oder Lebensmittel:",
     options=all_available_options,
     default=valid_defaults,
-    placeholder="Buchstaben eingeben (z. B. 'Co-Diovan', 'Ramipril plus HCT', 'Vimovo', 'Diclofenac')...",
+    placeholder="Buchstaben eingeben (z. B. 'Diazepam', 'Metformin', 'Spironolactone', 'Co-Diovan')...",
     help="Erkennt Einzelwirkstoffe, Markennamen und spaltet Fixkombinationen (z. B. Co-Diovan) automatisch auf."
 )
 
@@ -607,6 +652,10 @@ if len(active_substances) >= 2:
 
 multidrug_synergies = check_multidrug_synergies(active_substances) if len(active_substances) >= 2 else []
 
+# Priscus PIM & Nierenrisiken berechnen
+priscus_alerts = check_priscus_pim(active_substances) if is_elderly else []
+renal_alerts = check_renal_risks(active_substances, egfr_value)
+
 normalized_drugs = [translate_to_inn(d) for d in active_substances]
 has_raas = any(d in normalized_drugs for d in ["ramipril", "candesartan", "enalapril", "valsartan", "lisinopril"])
 has_diuretic = any(d in normalized_drugs for d in ["hydrochlorothiazide", "torsemide", "furosemide", "spironolactone"])
@@ -621,24 +670,34 @@ for d in active_substances:
 
 is_triple_whammy = has_raas and has_diuretic and has_systemic_nsar
 
-has_high = any(item["severity"] == "Hoch" for item in detected_interactions) or is_triple_whammy or any(s["severity"] == "Hoch" for s in multidrug_synergies)
-has_medium = any(item["severity"] == "Moderat" for item in detected_interactions) or len(multidrug_synergies) > 0
+has_high = (
+    any(item["severity"] == "Hoch" for item in detected_interactions) or 
+    is_triple_whammy or 
+    any(s["severity"] == "Hoch" for s in multidrug_synergies) or
+    any(r["severity"] == "Hoch" for r in renal_alerts)
+)
+has_medium = (
+    any(item["severity"] == "Moderat" for item in detected_interactions) or 
+    len(multidrug_synergies) > 0 or
+    len(priscus_alerts) > 0 or
+    len(renal_alerts) > 0
+)
 
 col1, col2, col3 = st.columns([1.3, 1, 1])
 
 with col1:
-    if len(active_substances) < 2:
+    if len(active_substances) < 2 and not priscus_alerts and not renal_alerts:
         status_color = "#64748b"
         status_text = "Mindestens 2 Einträge wählen"
         status_desc = "Wählen Sie Substanzen aus, um die Analyse zu starten."
     elif has_high:
         status_color = "#dc2626"
         status_text = "🔴 Hohe Relevanz fürs Arztgespräch"
-        status_desc = "Kritische Konflikte erkannt. Dringend ärztlich besprechen!"
+        status_desc = "Kritische Konflikte oder Kontraindikationen erkannt!"
     elif has_medium:
         status_color = "#d97706"
-        status_text = "🟡 Monitoring empfohlen"
-        status_desc = "Relevante Wechselwirkungen oder Resorptionskonflikte gefunden."
+        status_text = "🟡 Monitoring & Anpassung empfohlen"
+        status_desc = "Relevante Wechselwirkungen, PIM oder Nierenrisiken gefunden."
     else:
         status_color = "#16a34a"
         status_text = "🟢 Keine dokumentierten Konflikte"
@@ -662,19 +721,40 @@ with col2:
     """, unsafe_allow_html=True)
 
 with col3:
-    total_findings = len(detected_interactions) + len(multidrug_synergies) + (1 if is_triple_whammy else 0)
+    total_findings = len(detected_interactions) + len(multidrug_synergies) + len(priscus_alerts) + len(renal_alerts) + (1 if is_triple_whammy else 0)
     st.markdown(f"""
     <div class="metric-card">
         <div class="metric-title">Erkannte Befunde</div>
         <h2 style="margin:0; color: {'#dc2626' if total_findings > 0 else '#16a34a'};">
             {total_findings}
         </h2>
-        <div class="metric-desc">Konflikte, Resorption & Synergien</div>
+        <div class="metric-desc">Konflikte, PIM, Nierenrisiken & Synergien</div>
     </div>
     """, unsafe_allow_html=True)
 
 if is_triple_whammy:
     st.error("⚠️ **Akutes Triple-Whammy-Risiko:** Blutdrucksenker + Entwässerungsmittel + orales NSAR drosseln die glomeruläre Nierenfunktion akut. Sprechen Sie dies zeitnah beim Arzt an!")
+
+# Priscus 2.0 Warnungen
+for p in priscus_alerts:
+    st.markdown(f"""
+    <div class="priscus-card">
+        <h4 style="margin: 0 0 6px 0; color: #854d0e;">👴 Priscus 2.0 Warnung: Potenziell inadäquate Medikation im Alter ({p['drug'].capitalize()})</h4>
+        <p style="margin: 4px 0; font-size: 0.92rem; color: #1e293b;"><strong>Risiko:</strong> {p['risk']}</p>
+        <p style="margin: 4px 0; font-size: 0.88rem; color: #475569;"><strong>Hintergrund:</strong> {p['reason']}</p>
+        <p style="margin: 4px 0 0 0; font-size: 0.90rem; color: #15803d;"><strong>Mögliche Alternative laut Leitlinie:</strong> {p['alternative']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Nierenfunktions-Warnungen
+for r in renal_alerts:
+    st.markdown(f"""
+    <div class="renal-card">
+        <h4 style="margin: 0 0 6px 0; color: #c2410c;">🫘 Nierenfunktion & Dosisanpassung: {r['drug'].capitalize()} (eGFR: {egfr_value} ml/min)</h4>
+        <p style="margin: 4px 0; font-size: 0.92rem; color: #1e293b;"><strong>Klinischer Hinweis:</strong> {r['message']}</p>
+        <p style="margin: 4px 0 0 0; font-size: 0.86rem; color: #7c2d12;">Schwellenwert für Dosisanpassung/Kontraindikation: &lt; {r['cutoff']} ml/min.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 for syn in multidrug_synergies:
     st.markdown(f"""
@@ -720,8 +800,8 @@ if len(active_substances) > 0:
                 </div>
                 """, unsafe_allow_html=True)
 
-if len(active_substances) >= 2:
-    report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list)
+if len(active_substances) >= 1:
+    report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list, priscus_alerts, renal_alerts)
     file_ext = "pdf" if FPDF_AVAILABLE else "txt"
     mime_type = "application/pdf" if FPDF_AVAILABLE else "text/plain"
     

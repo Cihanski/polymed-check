@@ -5,6 +5,79 @@ import re
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "interactions.db")
 
+# Priscus 2.0 / PIM-Referenzkatalog (Potenziell inadaequate Medikation im Alter)
+PRISCUS_PIM_CATALOG = {
+    "diazepam": {
+        "reason": "Lange Eliminationshalbwertszeit (bis 100 h) und aktive Metaboliten.",
+        "risk": "Hohes Risiko fuer Hangover, Ataxie, Sedierung, Stuerze und Frakturen.",
+        "alternative": "Kurzwirksame Alternativen ohne aktive Metaboliten (z. B. Lorazepam, Oxazepam) zeitlich streng befristet."
+    },
+    "amitriptyline": {
+        "reason": "Sehr ausgepraegte anticholinerge und sedierende Eigenschaften.",
+        "risk": "Kognitiver Abbau, akutes Delir, Harnverhalt, Engwinkelglaukom, orthostatische Hypotonie und Stuerze.",
+        "alternative": "SSRI (z. B. Sertralin, Citalopram) oder SNRI unter Hyponatriaemie-Monitoring."
+    },
+    "clomipramine": {
+        "reason": "Starke anticholinerge und kardiotoxische Last.",
+        "risk": "Delir, erhoehtes Sturzrisiko und Arrhythmien.",
+        "alternative": "Moderne Antidepressiva (SSRI/SNRI)."
+    },
+    "doxepin": {
+        "reason": "Starke Anticholinergika-Wirkung und ZNS-Daempfung.",
+        "risk": "Kognitive Beeintraechtigung und kardiale Leitungsverzoegerung.",
+        "alternative": "Nicht-medikamentoese Schlafhygiene, Melatonin oder kurzfristig Z-Substanzen in halber Dosis."
+    },
+    "oxybutynin": {
+        "reason": "Ueberwindet die Blut-Hirn-Schranke, massive muskarinische Blockade.",
+        "risk": "Verstaerkung von Demenzsymptomen, akute Verwirrtheitszustaende und Mundtrockenheit.",
+        "alternative": "Trospiumchlorid (quartaeres Amin, passiert Bluthirnschranke kaum) oder Mirabegron."
+    },
+    "indometacin": {
+        "reason": "Sehr starke ZNS-Nebenwirkungen unter den NSAR.",
+        "risk": "Kopfschmerzen, Schwindel, Verwirrtheit sowie schwere GI-Ulkus- und renale Risiken.",
+        "alternative": "Ibuprofen in niedrigster wirksamer Dosis mit PPI oder Paracetamol/Metamizol."
+    },
+    "glibenclamide": {
+        "reason": "Lange Wirkdauer und renale Akkumulation aktiver Metaboliten.",
+        "risk": "Gefahr protrahierter, lebensbedrohlicher Hypoglykaemien.",
+        "alternative": "Metformin (bei ausreichender Nierenfunktion), DPP-4-Inhibitoren oder SGLT-2-Inhibitoren."
+    }
+}
+
+# Substanzen mit strenger Dosisanpassung / Kontraindikation bei Niereninsuffizienz
+RENAL_DOSE_CATALOG = {
+    "metformin": {
+        "cutoff_severe": 30,
+        "cutoff_moderate": 45,
+        "message_severe": "Kontraindiziert bei eGFR < 30 ml/min wegen des Risikos einer lebensbedrohlichen Laktatazidose.",
+        "message_moderate": "Dosisreduktion erforderlich (max. 1000 mg/Tag bei eGFR 30-44 ml/min) und engmaschige Nierenfunktionskontrolle."
+    },
+    "spironolactone": {
+        "cutoff_severe": 30,
+        "cutoff_moderate": 50,
+        "message_severe": "Kontraindiziert bei eGFR < 30 ml/min oder Serum-K > 5.0 mmol/l wegen exzessivem Hyperkaliaemierisiko.",
+        "message_moderate": "Hohes Hyperkaliaemierisiko: Dosis auf max. 25 mg/Tag limitieren und Serum-Kalium woechentlich monitoren."
+    },
+    "digoxin": {
+        "cutoff_severe": 30,
+        "cutoff_moderate": 50,
+        "message_severe": "Hauptsaechlich renal eliminiert. Massive Akkumulations- und Intoxikationsgefahr (AV-Block, Arrhythmien). TDM zwingend erforderlich.",
+        "message_moderate": "Dosisanpassung und engmaschiges Monitoring der Talspiegel erforderlich."
+    },
+    "rivaroxaban": {
+        "cutoff_severe": 15,
+        "cutoff_moderate": 50,
+        "message_severe": "Kontraindiziert bei eGFR < 15 ml/min.",
+        "message_moderate": "Dosisreduktion von 20 mg auf 15 mg 1x taeglich bei eGFR 15-49 ml/min erforderlich."
+    },
+    "allopurinol": {
+        "cutoff_severe": 30,
+        "cutoff_moderate": 50,
+        "message_severe": "Akkumulation des toxischen Metaboliten Oxipurinol (Gefahr eines lebensbedrohlichen DRESS-Syndroms). Dosis auf max. 100 mg/Tag limitieren.",
+        "message_moderate": "Dosisreduktion und engmaschige Harns resultContent-Kontrolle empfohlen."
+    }
+}
+
 
 def init_db():
     """Erstellt alle benoetigten Tabellen und initialisiert Kern-Klassenregeln."""
@@ -182,10 +255,7 @@ def get_atc_code(drug_name):
 
 
 def get_drug_pharmacology(drug_name):
-    """
-    Liest pharmakologische Details (Klasse, Organ, Metabolisierung/Elimination)
-    fuer eine gegebene Substanz aus der Datenbank aus.
-    """
+    """Liest pharmakologische Details aus der Datenbank aus."""
     if not drug_name:
         return None
 
@@ -216,6 +286,49 @@ def get_drug_pharmacology(drug_name):
                 }
 
     return None
+
+
+def check_priscus_pim(active_drugs):
+    """Prueft Wirkstoffe gegen den Priscus-2.0-PIM-Katalog fuer aeltere Patienten."""
+    findings = []
+    for d in active_drugs:
+        d_lower = d.strip().lower()
+        if d_lower in PRISCUS_PIM_CATALOG:
+            data = PRISCUS_PIM_CATALOG[d_lower]
+            findings.append({
+                "drug": d,
+                "reason": data["reason"],
+                "risk": data["risk"],
+                "alternative": data["alternative"]
+            })
+    return findings
+
+
+def check_renal_risks(active_drugs, egfr):
+    """Bewertet Risiken und Dosisgrenzen basierend auf der glomerularen Filtrationsrate."""
+    if egfr >= 60:
+        return []
+
+    alerts = []
+    for d in active_drugs:
+        d_lower = d.strip().lower()
+        if d_lower in RENAL_DOSE_CATALOG:
+            info = RENAL_DOSE_CATALOG[d_lower]
+            if egfr < info["cutoff_severe"]:
+                alerts.append({
+                    "drug": d,
+                    "severity": "Hoch",
+                    "cutoff": info["cutoff_severe"],
+                    "message": info["message_severe"]
+                })
+            elif egfr < info["cutoff_moderate"]:
+                alerts.append({
+                    "drug": d,
+                    "severity": "Moderat",
+                    "cutoff": info["cutoff_moderate"],
+                    "message": info["message_moderate"]
+                })
+    return alerts
 
 
 def check_phytomed_rules(drug_a, drug_b):
