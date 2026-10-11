@@ -42,18 +42,19 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* Dark Theme Card Overrides */
     .metric-card {
-        background-color: #ffffff;
+        background-color: #0f172a !important;
         border-radius: 12px;
         padding: 20px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        border: 1px solid #1e293b;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
         margin-bottom: 20px;
-        color: #1e293b !important;
+        color: #f1f5f9 !important;
     }
     .metric-title {
         margin: 0 0 8px 0; 
-        color: #1e293b !important; 
+        color: #94a3b8 !important; 
         font-size: 0.95rem; 
         font-weight: 600;
     }
@@ -71,186 +72,147 @@ st.markdown("""
         margin-right: 8px;
     }
     .badge-high {
-        background-color: #fee2e2;
-        color: #991b1b !important;
-        border: 1px solid #fecaca;
+        background-color: #450a0a !important;
+        color: #fca5a5 !important;
+        border: 1px solid #991b1b;
     }
     .badge-medium {
-        background-color: #fef3c7;
-        color: #92400e !important;
-        border: 1px solid #fde68a;
+        background-color: #451a03 !important;
+        color: #fcd34d !important;
+        border: 1px solid #b45309;
     }
     .badge-organ {
-        background-color: #e0f2fe;
-        color: #075985 !important;
-        border: 1px solid #bae6fd;
+        background-color: #082f49 !important;
+        color: #7dd3fc !important;
+        border: 1px solid #0369a1;
     }
     .badge-db {
-        background-color: #f3e8ff;
-        color: #6b21a8 !important;
-        border: 1px solid #e9d5ff;
+        background-color: #3b0764 !important;
+        color: #d8b4fe !important;
+        border: 1px solid #7e22ce;
     }
     .badge-class {
-        background-color: #e0e7ff;
-        color: #3730a3 !important;
-        border: 1px solid #c7d2fe;
+        background-color: #1e1b4b !important;
+        color: #a5b4fc !important;
+        border: 1px solid #4338ca;
     }
     .badge-phyto {
-        background-color: #dcfce7;
-        color: #166534 !important;
-        border: 1px solid #bbf7d0;
+        background-color: #052e16 !important;
+        color: #86efac !important;
+        border: 1px solid #15803d;
     }
     .badge-fda {
-        background-color: #ecfdf5;
-        color: #065f46 !important;
-        border: 1px solid #a7f3d0;
+        background-color: #064e3b !important;
+        color: #6ee7b7 !important;
+        border: 1px solid #047857;
     }
     .interaction-card {
-        background-color: #ffffff;
-        border-left: 5px solid #cbd5e1;
+        background-color: #0f172a !important;
+        border-left: 5px solid #475569;
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-        border-top: 1px solid #f1f5f9;
-        border-right: 1px solid #f1f5f9;
-        border-bottom: 1px solid #f1f5f9;
-        color: #1e293b !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        border-top: 1px solid #1e293b;
+        border-right: 1px solid #1e293b;
+        border-bottom: 1px solid #1e293b;
+        color: #f1f5f9 !important;
     }
     .interaction-card.high {
-        border-left-color: #ef4444;
+        border-left-color: #ef4444 !important;
     }
     .interaction-card.medium {
-        border-left-color: #f59e0b;
+        border-left-color: #f59e0b !important;
     }
     .advice-box {
-        background-color: #f0fdf4;
-        border-left: 4px solid #22c55e;
+        background-color: #022c22 !important;
+        border-left: 4px solid #10b981;
         border-radius: 4px;
         padding: 8px 12px;
         margin-top: 8px;
         font-size: 0.90rem;
-        color: #166534 !important;
+        color: #a7f3d0 !important;
     }
     .combo-box {
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
+        background-color: #0f172a !important;
+        border: 1px solid #334155;
         border-radius: 6px;
         padding: 10px 14px;
         margin-bottom: 16px;
         font-size: 0.90rem;
-        color: #334155 !important;
+        color: #cbd5e1 !important;
     }
     .profile-card {
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
+        background-color: #0f172a !important;
+        border: 1px solid #1e293b;
         border-radius: 8px;
         padding: 14px 18px;
         margin-bottom: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-        color: #1e293b !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        color: #f1f5f9 !important;
     }
     .priscus-card {
-        background-color: #fefce8;
-        border: 1px solid #fef08a;
-        border-left: 6px solid #ca8a04;
+        background-color: #422006 !important;
+        border: 1px solid #854d0e;
+        border-left: 6px solid #eab308;
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
-        color: #1e293b !important;
+        color: #fef08a !important;
     }
     .renal-card {
-        background-color: #fff7ed;
-        border: 1px solid #fed7aa;
-        border-left: 6px solid #ea580c;
+        background-color: #431407 !important;
+        border: 1px solid #9a3412;
+        border-left: 6px solid #f97316;
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
-        color: #1e293b !important;
+        color: #fed7aa !important;
     }
     .schedule-card {
-        background-color: #f8fafc;
-        border: 1px solid #cbd5e1;
-        border-left: 6px solid #2563eb;
+        background-color: #0f172a !important;
+        border: 1px solid #1e293b;
+        border-left: 6px solid #3b82f6;
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
-        color: #0f172a !important;
-    }
-    .schedule-card strong {
-        color: #0f172a !important;
-    }
-    .schedule-card li {
-        color: #334155 !important;
+        color: #f1f5f9 !important;
     }
     .monitoring-card {
-        background-color: #f0f9ff;
-        border: 1px solid #bae6fd;
-        border-left: 6px solid #0284c7;
+        background-color: #082f49 !important;
+        border: 1px solid #0369a1;
+        border-left: 6px solid #38bdf8;
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 20px;
-        color: #1e293b !important;
+        color: #e0f2fe !important;
     }
     .synergy-card {
-        background-color: #fff1f2;
-        border: 1px solid #fecdd3;
-        border-left: 6px solid #e11d48;
+        background-color: #4c0519 !important;
+        border: 1px solid #9f1239;
+        border-left: 6px solid #f43f5e;
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
-        color: #1e293b !important;
+        color: #ffe4e6 !important;
     }
     .disclaimer-banner {
-        background-color: #eff6ff;
-        border-left: 4px solid #3b82f6;
+        background-color: #0f172a !important;
+        border-left: 4px solid #38bdf8;
         border-radius: 6px;
         padding: 12px 16px;
         margin-bottom: 20px;
-        color: #1e3a8a !important;
+        color: #bae6fd !important;
         font-size: 0.9rem;
     }
     .disclaimer-box {
-        background-color: #f8fafc;
-        border: 1px solid #cbd5e1;
+        background-color: #0b0f19 !important;
+        border: 1px solid #1e293b;
         border-radius: 8px;
         padding: 16px;
         font-size: 0.88rem;
-        color: #475569 !important;
+        color: #64748b !important;
         margin-top: 30px;
-    }
-
-    @media print {
-        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {
-            display: none !important;
-        }
-        .stButton, .stDownloadButton, [data-testid="stExpander"] {
-            display: none !important;
-        }
-        [data-testid="stMultiSelect"] {
-            display: none !important;
-        }
-        body, .stApp {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        .main .block-container {
-            max-width: 100% !important;
-            padding: 10mm 15mm !important;
-        }
-        .metric-card, .interaction-card, .schedule-card, .monitoring-card, .synergy-card, .priscus-card, .renal-card {
-            box-shadow: none !important;
-            border: 1px solid #94a3b8 !important;
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-        }
-        .disclaimer-banner {
-            border: 1px solid #94a3b8 !important;
-        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -334,7 +296,7 @@ def get_aggregated_monitoring(active_drugs, detected_interactions, synergies):
 
 
 def render_interaction_network(active_substances, detected_interactions, synergies):
-    """Erzeugt ein 2-Spalten Split-Panel mit Unterstützung für den Zero-Conflict-Zustand."""
+    """Erzeugt ein standfestes 2-Spalten Split-Panel im Dark-Design."""
     nodes = []
     edges = []
 
@@ -358,7 +320,6 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             else:
                 mod_risk_drugs.add(d)
 
-    # 1. Knoten
     for d in active_substances:
         clean_name = d.replace(" 🍊", "").replace(" 🥛", "").replace(" 🌿", "").replace(" 🩸", "").replace(" 🍬", "").replace(" 🍂", "").replace(" 🍃", "").replace(" 🧄", "").capitalize()
         pharm = get_drug_pharmacology(d)
@@ -371,8 +332,6 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         elif "simvastatin" in d_low: sub_class = "Statin"
         elif "metformin" in d_low: sub_class = "Biguanid"
         elif "ciprofloxacin" in d_low: sub_class = "Antibiotikum"
-        elif "pantoprazol" in d_low or "omeprazol" in d_low: sub_class = "Protonenpumpenhemmer"
-        elif "paracetamol" in d_low: sub_class = "Nicht-Opioid-Analgetikum"
         elif pharm and pharm.get("drug_class") and "WHO-ATC" not in pharm.get("drug_class"):
             sub_class = pharm["drug_class"][:14]
 
@@ -410,7 +369,6 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             "shadow": {"enabled": True, "color": glow_color, "size": 10, "x": 0, "y": 3}
         })
 
-    # 2. Kanten
     edge_details_map = {}
     first_edge_id = None
     for idx, item in enumerate(detected_interactions):
@@ -468,10 +426,10 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           gap: 16px;
           width: 100%;
-          min-height: 410px;
+          min-height: 420px;
         }}
         #radar-container {{
-          flex: 1.6;
+          flex: 1.5;
           display: flex;
           flex-direction: column;
           border: 1px solid #1e293b;
@@ -479,10 +437,11 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           background-color: #090d16;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
           overflow: hidden;
+          position: relative;
         }}
         #network {{
           width: 100%;
-          height: 355px;
+          height: 365px;
           background-color: #090d16;
           background-image: 
             radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.35) 0%, rgba(9, 13, 22, 1) 100%),
@@ -494,11 +453,11 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           justify-content: space-around;
           align-items: center;
-          height: 48px;
+          height: 45px;
           padding: 0 16px;
           background-color: #030712;
           border-top: 1px solid #1e293b;
-          font-size: 12.5px;
+          font-size: 12px;
           color: #cbd5e1;
         }}
         .dot {{
@@ -509,7 +468,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           margin-right: 6px;
         }}
         #detail-panel {{
-          flex: 1.4;
+          flex: 1.3;
           border: 1px solid #334155;
           border-radius: 12px;
           background: #0f172a;
@@ -518,12 +477,12 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
-          min-height: 410px;
+          min-height: 420px;
           overflow-y: auto;
         }}
         .panel-badge {{
           align-self: flex-start;
-          font-size: 11.5px;
+          font-size: 11px;
           font-weight: 700;
           padding: 4px 12px;
           border-radius: 9999px;
@@ -535,14 +494,14 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         .badge-green {{ background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; }}
         .badge-blue {{ background: #0c4a6e; color: #bae6fd; border: 1px solid #0284c7; }}
         .panel-title {{
-          font-size: 19px;
+          font-size: 18px;
           font-weight: 700;
           color: #ffffff;
-          margin: 0 0 12px 0;
+          margin: 0 0 10px 0;
           line-height: 1.3;
         }}
         .panel-desc {{
-          font-size: 14px;
+          font-size: 13.5px;
           line-height: 1.6;
           color: #e2e8f0;
           margin: 0 0 16px 0;
@@ -561,17 +520,17 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         <div id="radar-container">
           <div id="network"></div>
           <div class="legend-bar">
-            <span><span class="dot" style="background:#ef4444; box-shadow:0 0 6px #ef4444;"></span><strong>Hohes Risiko</strong> (Klinisch kritisch)</span>
-            <span><span class="dot" style="background:#f59e0b; box-shadow:0 0 6px #f59e0b;"></span><strong>Moderates Risiko</strong> (Monitoring nötig)</span>
-            <span><span class="dot" style="background:#10b981; box-shadow:0 0 6px #10b981;"></span><strong>Kein Risiko</strong> (Unbedenklich)</span>
+            <span><span class="dot" style="background:#ef4444; box-shadow:0 0 6px #ef4444;"></span><strong>Hohes Risiko</strong></span>
+            <span><span class="dot" style="background:#f59e0b; box-shadow:0 0 6px #f59e0b;"></span><strong>Moderates Risiko</strong></span>
+            <span><span class="dot" style="background:#10b981; box-shadow:0 0 6px #10b981;"></span><strong>Kein Risiko</strong></span>
           </div>
         </div>
 
         <div id="detail-panel">
           <span id="p-badge" class="panel-badge {'badge-blue' if has_conflicts else 'badge-green'}">{'Klinische Inspektion' if has_conflicts else 'Unbedenkliche Kombination'}</span>
           <h3 id="p-title" class="panel-title">{'Interaktions-Radar' if has_conflicts else 'Keine dokumentierten Konflikte'}</h3>
-          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.' if has_conflicts else 'In den geprüften Fachinformationen und Datenbanken sind zwischen den ausgewählten Wirkstoffen keine relevanten pharmakodynamischen oder kinetischen Interaktionen verzeichnet. Die Kombination gilt im Standard-Dosisbereich als gut verträglich.'}</p>
-          <div class="panel-hint">💡 <em>Knoten lassen sich mit der Maus bewegen und zoomen.</em></div>
+          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.' if has_conflicts else 'In den geprüften Fachinformationen und Datenbanken sind zwischen den ausgewählten Wirkstoffen keine relevanten Interaktionen verzeichnet. Die Kombination gilt als verträglich.'}</p>
+          <div class="panel-hint">💡 <em>Knoten sind zentriert fixiert und können mit der Maus gezogen werden.</em></div>
         </div>
       </div>
 
@@ -591,25 +550,40 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         
         var options = {{
           physics: {{
-            stabilization: {{ iterations: 200 }},
+            enabled: true,
+            stabilization: {{
+              enabled: true,
+              iterations: 150,
+              updateInterval: 25
+            }},
             barnesHut: {{
-              gravitationalConstant: -4000,
-              centralGravity: 0.65,
-              springLength: 120,
-              springConstant: 0.05,
-              avoidOverlap: 0.85
+              gravitationalConstant: -3000,
+              centralGravity: 0.8,
+              springLength: 95,
+              springConstant: 0.08,
+              damping: 0.4,
+              avoidOverlap: 1
             }}
           }},
           interaction: {{
             hover: true,
             zoomView: true,
-            dragView: true
+            dragView: true,
+            dragNodes: true
           }}
         }};
 
         var network = new vis.Network(container, data, options);
+
+        // STANDFEST-LOGIK: Sobald die Stabilisierung fertig ist, frieren wir die Physik ein
         network.once('stabilizationIterationsDone', function() {{
-          network.fit({{ animation: {{ duration: 300 }} }});
+          network.setOptions({{ physics: false }});
+          network.fit({{
+            animation: {{
+              duration: 400,
+              easingFunction: 'easeInOutQuad'
+            }}
+          }});
           
           if (hasConflicts && defaultEdge && edgeMap[defaultEdge]) {{
             showEdgeDetails(edgeMap[defaultEdge]);
@@ -638,14 +612,14 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             pBadge.className = "panel-badge badge-blue";
             pBadge.innerText = "Wirkstoff-Fokus";
             pTitle.innerText = nodeId.toUpperCase();
-            pDesc.innerText = "Dieser Wirkstoff ist im Netzwerk aktiv. Wählen Sie verbundene Farblinien für detaillierte Wechselwirkungen aus.";
+            pDesc.innerText = "Dieser Wirkstoff ist im Netzwerk aktiv. Wählen Sie eine Verbindungslinie für die Wechselwirkung.";
           }}
         }});
       </script>
     </body>
     </html>
     """
-    components.html(html_code, height=440)
+    components.html(html_code, height=450)
 
 @st.cache_data(ttl=3600)
 def load_cached_catalog():
