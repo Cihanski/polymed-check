@@ -91,14 +91,25 @@ def init_database():
 
 
 def get_all_atc_codes(drug_name):
-    """Ermittelt alle hinterlegten ATC-Codes fuer einen Wirkstoff."""
+    """Ermittelt alle hinterlegten ATC-Codes fuer einen Wirkstoff (defensiv gegen fehlende Tabellen)."""
     d_clean = drug_name.lower().strip()
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT atc_code FROM atc_codes WHERE LOWER(drug_name) = ?", (d_clean,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [r["atc_code"] for r in rows]
+    try:
+        cursor.execute("SELECT atc_code FROM atc_codes WHERE LOWER(drug_name) = ?", (d_clean,))
+        rows = cursor.fetchall()
+        return [r["atc_code"] for r in rows]
+    except sqlite3.OperationalError:
+        # Falls Tabelle in der Cloud-DB noch fehlt, automatisch nachziehen
+        init_database()
+        try:
+            cursor.execute("SELECT atc_code FROM atc_codes WHERE LOWER(drug_name) = ?", (d_clean,))
+            rows = cursor.fetchall()
+            return [r["atc_code"] for r in rows]
+        except Exception:
+            return []
+    finally:
+        conn.close()
 
 
 def get_drug_pharmacology(drug_name):
