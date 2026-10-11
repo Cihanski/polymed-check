@@ -2,6 +2,7 @@ import os
 os.environ["FONTTOOLS_DONT_USE_CYTHON"] = "1"
 
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import re
 from itertools import combinations
@@ -217,6 +218,40 @@ st.markdown("""
         font-size: 0.88rem;
         color: #475569 !important;
         margin-top: 30px;
+    }
+
+    /* ----------------- NATIVES PRINT-CSS (DIN A4 OPTIMIERT) ----------------- */
+    @media print {
+        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+            display: none !important;
+        }
+        .stButton, .stDownloadButton, [data-testid="stExpander"] {
+            display: none !important;
+        }
+        [data-testid="stMultiSelect"] {
+            display: none !important;
+        }
+        body, .stApp {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        .main .block-container {
+            max-width: 100% !important;
+            padding: 10mm 15mm !important;
+        }
+        .metric-card, .interaction-card, .schedule-card, .monitoring-card, .synergy-card, .priscus-card, .renal-card {
+            box-shadow: none !important;
+            border: 1px solid #94a3b8 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .disclaimer-banner {
+            border: 1px solid #94a3b8 !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -477,7 +512,7 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
         pdf.set_font("Helvetica", size=9)
         
         if is_triple:
-            pdf.multi_cell(width, 5, clean_text_for_pdf("- Triple-Whammy-Kombination: Renale Dekompensation durch RAAS-Hemmer + Diuretikum + NSAR (systemisch)."), fill=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(width, 5, clean_text_for_pdf("- Triple-Whammy: Renale Dekompensation durch RAAS-Hemmer + Diuretikum + NSAR (systemisch)."), fill=True, new_x="LMARGIN", new_y="NEXT")
         
         for syn in synergies:
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"- {syn['title']}: {syn['effect']}"), fill=True, new_x="LMARGIN", new_y="NEXT")
@@ -492,7 +527,7 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
         pdf.set_text_color(20, 20, 20)
     
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, clean_text_for_pdf(f"3. Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("3. Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
     
     if len(interactions) == 0:
         pdf.set_font("Helvetica", size=10)
@@ -840,18 +875,26 @@ if len(active_substances) > 0:
                 </div>
                 """, unsafe_allow_html=True)
 
+# ----------------- Export- & Druckbereich -----------------
 if len(active_substances) >= 1:
     report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list, priscus_alerts, renal_alerts, intake_schedule)
     file_ext = "pdf" if FPDF_AVAILABLE else "txt"
     mime_type = "application/pdf" if FPDF_AVAILABLE else "text/plain"
-    
-    st.download_button(
-        label="📄 Gesprächsleitfaden für das nächste Arztgespräch herunterladen",
-        data=report_bytes,
-        file_name=f"MediCheck_Arzt_Gespraechsleitfaden.{file_ext}",
-        mime=mime_type,
-        use_container_width=True
-    )
+
+    col_btn1, col_btn2 = st.columns([1.5, 1])
+
+    with col_btn1:
+        st.download_button(
+            label="📄 Gesprächsleitfaden herunterladen (PDF / TXT)",
+            data=report_bytes,
+            file_name=f"MediCheck_Arzt_Gespraechsleitfaden.{file_ext}",
+            mime=mime_type,
+            use_container_width=True
+        )
+
+    with col_btn2:
+        if st.button("🖨️ Bericht direkt drucken", use_container_width=True):
+            components.html("<script>window.parent.print();</script>", height=0, width=0)
 
 st.subheader("Detaillierte Analyse der Paar-Wechselwirkungen")
 
