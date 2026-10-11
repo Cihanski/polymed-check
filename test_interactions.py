@@ -167,3 +167,47 @@ def test_intake_schedule_diuretic_morning():
     """Prueft die Verlegung von Diuretika auf den Morgen zur Vermeidung von Nykturie."""
     schedule = generate_intake_schedule(["Torasemid"])
     assert "Morgens (Zum Fruehstueck)" in schedule
+
+from bmp_parser import parse_medication_text, parse_bmp_xml
+
+
+def test_bmp_xml_parser():
+    """Prueft das Extrahieren von Wirkstoffen aus BMP-XML-Strukturen."""
+    sample_xml = """<MP v="024" U="uuid">
+        <S>
+            <M p="12345678" w="Ramipril" d="5mg"/>
+            <M p="87654321" a="Pantozol" d="40mg"/>
+        </S>
+    </MP>"""
+    results = parse_bmp_xml(sample_xml)
+    assert "Ramipril" in results
+    assert "Pantozol" in results
+
+
+def test_medication_freetext_parser():
+    """Prueft die Bereinigung klinischer Freitextzeilen inklusive Dosierungen."""
+    clinical_text = """
+    1. Metformin 1000 mg 1-0-1-0
+    2. Simvastatin 20mg 0-0-1-0
+    3. Torasemid 10 mg morgens
+    """
+    parsed = parse_medication_text(clinical_text)
+    assert any("metformin" in p.lower() for p in parsed)
+    assert any("simvastatin" in p.lower() for p in parsed)
+    assert any("torasemid" in p.lower() for p in parsed)
+
+from cache_manager import generate_lab_monitoring_checklist
+
+
+def test_lab_monitoring_checklist_generation():
+    """Prueft die Erstellung von Labormonitoring-Empfehlungen fuer RAAS und QTc-Risiken."""
+    drugs = ["Ramipril", "Ciprofloxacin", "Amiodaron"]
+    checklist = generate_lab_monitoring_checklist(drugs, egfr_value=45)
+    
+    params = [c["parameter"] for c in checklist]
+    assert any("Serum-Kalium" in p for p in params)
+    assert any("EKG" in p for p in params)
+    assert any("Schilddruese" in p for p in params)
+
+    qt_item = next(c for c in checklist if "EKG" in c["parameter"])
+    assert qt_item["urgency"] == "Hoch"

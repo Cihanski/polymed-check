@@ -15,6 +15,7 @@ from cache_manager import (
     check_priscus_pim,
     check_renal_risks,
     generate_intake_schedule,
+    generate_lab_monitoring_checklist,
     get_drug_pharmacology,
     fetch_fda_interaction
 )
@@ -605,7 +606,6 @@ available_drugs_catalog = [
 if "selected_drugs" not in st.session_state:
     st.session_state["selected_drugs"] = ["Ramipril", "Ibuprofen", "Torasemid"]
 
-# Multiselect synchronisiert mit session_state
 selected_drugs = st.sidebar.multiselect(
     "Aktive Wirkstoffe:",
     options=sorted(list(set(available_drugs_catalog + st.session_state["selected_drugs"]))),
@@ -644,11 +644,12 @@ if len(active_substances) >= 2:
         if res:
             detected_interactions.append(res)
 
-# Synergien, Priscus & Nierenrisiken
+# Synergien, Priscus, Nierenrisiken & Labor-Monitoring
 synergies = check_multidrug_synergies(active_substances)
 priscus_alerts = check_priscus_pim(active_substances) if is_geriatric else []
 renal_alerts = check_renal_risks(active_substances, egfr_value)
 schedule = generate_intake_schedule(active_substances)
+lab_checklist = generate_lab_monitoring_checklist(active_substances, egfr_value)
 
 # --- KPI-Kacheln ---
 col1, col2, col3, col4 = st.columns(4)
@@ -763,6 +764,22 @@ if detected_interactions:
         """, unsafe_allow_html=True)
 else:
     st.info("Keine paarweisen Wechselwirkungen zwischen den ausgewählten Wirkstoffen dokumentiert.")
+
+# --- LABORMONITORING CHECKLISTE ---
+if lab_checklist:
+    st.markdown("### 🧪 Leitliniengestützte Labormonitoring-Empfehlungen")
+    for lab in lab_checklist:
+        is_urgent = lab["urgency"] == "Hoch"
+        badge_class = "badge-high" if is_urgent else "badge-organ"
+        st.markdown(f"""
+        <div class="monitoring-card">
+            <span class="status-badge {badge_class}">{lab['urgency']}e Priorität</span>
+            <span class="status-badge badge-db">Intervall: {lab['interval']}</span>
+            <h4 style="margin:8px 0 6px 0; color:#ffffff;">🔬 {lab['parameter']}</h4>
+            <p style="margin:0 0 6px 0; font-size:0.92rem; color:#cbd5e1;"><strong>Indikation / Auslöser:</strong> {', '.join(lab['triggers'])}</p>
+            <p style="margin:0; font-size:0.90rem; color:#94a3b8;"><strong>Klinische Begründung:</strong> {lab['reason']}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # --- CHRONOPHARMAKOLOGISCHER EINNAHMEPLAN ---
 st.markdown("### ⏰ Chronopharmakologischer Einnahmezeitplan")

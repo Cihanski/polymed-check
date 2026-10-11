@@ -699,6 +699,79 @@ def generate_intake_schedule(active_drugs):
     # Leere Zeiteinheiten entfernen
     return {k: v for k, v in schedule.items() if len(v) > 0}
 
+def generate_lab_monitoring_checklist(active_drugs, egfr_value=None):
+    """
+    Erstellt eine leitliniengestuetzte Labor-Checkliste basierend auf den
+    aktiven Substanzen und Begleiterkrankungen (z. B. eGFR).
+    """
+    checklist = []
+    if not active_drugs:
+        return checklist
+
+    def has_any(keywords):
+        return any(any(k.lower() in d.lower() for k in keywords) for d in active_drugs)
+
+    # 1. Kalium & Nierenretentionsparameter (Kreatinin, Harnstoff, eGFR)
+    raas_and_diuretics = [
+        "ramipril", "enalapril", "lisinopril", "candesartan", "valsartan", 
+        "losartan", "spironolacton", "eplerenon", "torasemid", "furosemid", "hct"
+    ]
+    if has_any(raas_and_diuretics) or (egfr_value and egfr_value < 60):
+        checklist.append({
+            "parameter": "Serum-Kalium & Serum-Kreatinin (eGFR)",
+            "urgency": "Hoch" if (has_any(["spironolacton"]) or (egfr_value and egfr_value < 30)) else "Standard",
+            "interval": "Initial nach 1–2 Wochen, danach alle 3–6 Monate",
+            "reason": "Risiko fuer Entgleisungen des Kaliumhaushalts (Hyper- oder Hypokaliaemie) und akute Verschlechterung der Nierenperfusion.",
+            "triggers": [d.capitalize() for d in active_drugs if any(k in d.lower() for k in raas_and_diuretics)]
+        })
+
+    # 2. Lebertransaminasen (GOT, GPT, gamma-GT)
+    liver_drugs = ["simvastatin", "atorvastatin", "pravastatin", "amiodaron", "methotrexat"]
+    if has_any(liver_drugs):
+        checklist.append({
+            "parameter": "Leberenzyme (ALT/GPT, AST/GOT, Bilirubin)",
+            "urgency": "Standard",
+            "interval": "Vor Therapiebeginn, nach Dosiserhoehung und jaehrlich",
+            "reason": "Ueberwachung auf medikamentoes-toxische Hepatopathie oder erhoehte Transaminasenwerte.",
+            "triggers": [d.capitalize() for d in active_drugs if any(k in d.lower() for k in liver_drugs)]
+        })
+
+    # 3. Schilddruesenparameter (TSH, fT3, fT4)
+    thyroid_drugs = ["amiodaron", "l-thyroxin", "levothyroxin"]
+    if has_any(thyroid_drugs):
+        checklist.append({
+            "parameter": "Schilddruesenstatus (basales TSH, ggf. freies T3/T4)",
+            "urgency": "Hoch" if has_any(["amiodaron"]) else "Standard",
+            "interval": "Alle 3–6 Monate (bei Amiodaron strikt halbjaehrlich)",
+            "reason": "Amiodaron kann schwere Hypo- oder Hyperthyreosen induzieren; Dosisanpassung bei L-Thyroxin.",
+            "triggers": [d.capitalize() for d in active_drugs if any(k in d.lower() for k in thyroid_drugs)]
+        })
+
+    # 4. Blutbild & Gerinnung (Hb, Thrombozyten, ggf. Quick/INR oder Anti-Xa)
+    blood_drugs = ["aspirin", "clopidogrel", "apixaban", "rivaroxaban", "edoxaban", "dabigatran", "ibuprofen", "diclofenac"]
+    if has_any(blood_drugs):
+        checklist.append({
+            "parameter": "Kleines Blutbild (Hb, Erythrozyten, Thrombozyten)",
+            "urgency": "Standard",
+            "interval": "Alle 6–12 Monate (bei Zeichen von Muedigkeit/Blassheit sofort)",
+            "reason": "Frueherkennung okkulter gastrointestinaler Blutungen unter Thrombozytenaggregationshemmern, NSAR oder DOAKs.",
+            "triggers": [d.capitalize() for d in active_drugs if any(k in d.lower() for k in blood_drugs)]
+        })
+
+    # 5. EKG (QTc-Zeit)
+    qt_drugs = ["ciprofloxacin", "amiodaron", "sotalol", "citalopram", "escitalopram", "haloperidol", "clarithromycin"]
+    matched_qt = [d.capitalize() for d in active_drugs if any(k in d.lower() for k in qt_drugs)]
+    if len(matched_qt) >= 2 or has_any(["amiodaron", "sotalol"]):
+        checklist.append({
+            "parameter": "12-Kanal-EKG (QTc-Intervall)",
+            "urgency": "Hoch" if len(matched_qt) >= 2 else "Standard",
+            "interval": "Vor Beginn der Kombination und nach 1–2 Wochen",
+            "reason": "Erfassung einer pathologischen QTc-Zeit-Verlaengerung (> 500 ms) zur Praevention von Torsade-de-Pointes-Arrhythmien.",
+            "triggers": matched_qt
+        })
+
+    return checklist
+
 # --- Rueckwaertskompatibilitaet fuer aeltere Testmodule (z.B. test_cache.py) ---
 
 def check_cache(drug_a, drug_b):
