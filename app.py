@@ -334,7 +334,7 @@ def get_aggregated_monitoring(active_drugs, detected_interactions, synergies):
 
 
 def render_interaction_network(active_substances, detected_interactions, synergies):
-    """Erzeugt ein 2-Spalten Split-Panel mit fester Hoehe und vollstaendiger Legende."""
+    """Erzeugt ein 2-Spalten Split-Panel mit Unterstützung für den Zero-Conflict-Zustand."""
     nodes = []
     edges = []
 
@@ -358,6 +358,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             else:
                 mod_risk_drugs.add(d)
 
+    # 1. Knoten
     for d in active_substances:
         clean_name = d.replace(" 🍊", "").replace(" 🥛", "").replace(" 🌿", "").replace(" 🩸", "").replace(" 🍬", "").replace(" 🍂", "").replace(" 🍃", "").replace(" 🧄", "").capitalize()
         pharm = get_drug_pharmacology(d)
@@ -370,6 +371,8 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         elif "simvastatin" in d_low: sub_class = "Statin"
         elif "metformin" in d_low: sub_class = "Biguanid"
         elif "ciprofloxacin" in d_low: sub_class = "Antibiotikum"
+        elif "pantoprazol" in d_low or "omeprazol" in d_low: sub_class = "Protonenpumpenhemmer"
+        elif "paracetamol" in d_low: sub_class = "Nicht-Opioid-Analgetikum"
         elif pharm and pharm.get("drug_class") and "WHO-ATC" not in pharm.get("drug_class"):
             sub_class = pharm["drug_class"][:14]
 
@@ -407,6 +410,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             "shadow": {"enabled": True, "color": glow_color, "size": 10, "x": 0, "y": 3}
         })
 
+    # 2. Kanten
     edge_details_map = {}
     first_edge_id = None
     for idx, item in enumerate(detected_interactions):
@@ -442,6 +446,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
     edges_json = json.dumps(edges)
     edge_details_json = json.dumps(edge_details_map)
     default_edge_id = json.dumps(first_edge_id)
+    has_conflicts = len(detected_interactions) > 0
 
     html_code = f"""
     <!DOCTYPE html>
@@ -527,6 +532,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         }}
         .badge-red {{ background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }}
         .badge-yellow {{ background: #78350f; color: #fef3c7; border: 1px solid #f59e0b; }}
+        .badge-green {{ background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; }}
         .badge-blue {{ background: #0c4a6e; color: #bae6fd; border: 1px solid #0284c7; }}
         .panel-title {{
           font-size: 19px;
@@ -562,9 +568,9 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         </div>
 
         <div id="detail-panel">
-          <span id="p-badge" class="panel-badge badge-blue">Klinische Inspektion</span>
-          <h3 id="p-title" class="panel-title">Interaktions-Radar</h3>
-          <p id="p-desc" class="panel-desc">Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.</p>
+          <span id="p-badge" class="panel-badge {'badge-blue' if has_conflicts else 'badge-green'}">{'Klinische Inspektion' if has_conflicts else 'Unbedenkliche Kombination'}</span>
+          <h3 id="p-title" class="panel-title">{'Interaktions-Radar' if has_conflicts else 'Keine dokumentierten Konflikte'}</h3>
+          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.' if has_conflicts else 'In den geprüften Fachinformationen und Datenbanken sind zwischen den ausgewählten Wirkstoffen keine relevanten pharmakodynamischen oder kinetischen Interaktionen verzeichnet. Die Kombination gilt im Standard-Dosisbereich als gut verträglich.'}</p>
           <div class="panel-hint">💡 <em>Knoten lassen sich mit der Maus bewegen und zoomen.</em></div>
         </div>
       </div>
@@ -574,6 +580,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         var edges = new vis.DataSet({edges_json});
         var edgeMap = {edge_details_json};
         var defaultEdge = {default_edge_id};
+        var hasConflicts = {'true' if has_conflicts else 'false'};
 
         var container = document.getElementById('network');
         var pBadge = document.getElementById('p-badge');
@@ -586,9 +593,9 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           physics: {{
             stabilization: {{ iterations: 200 }},
             barnesHut: {{
-              gravitationalConstant: -4500,
-              centralGravity: 0.7,
-              springLength: 110,
+              gravitationalConstant: -4000,
+              centralGravity: 0.65,
+              springLength: 120,
               springConstant: 0.05,
               avoidOverlap: 0.85
             }}
@@ -604,7 +611,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         network.once('stabilizationIterationsDone', function() {{
           network.fit({{ animation: {{ duration: 300 }} }});
           
-          if (defaultEdge && edgeMap[defaultEdge]) {{
+          if (hasConflicts && defaultEdge && edgeMap[defaultEdge]) {{
             showEdgeDetails(edgeMap[defaultEdge]);
           }}
         }});
@@ -631,7 +638,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             pBadge.className = "panel-badge badge-blue";
             pBadge.innerText = "Wirkstoff-Fokus";
             pTitle.innerText = nodeId.toUpperCase();
-            pDesc.innerText = "Dieser Wirkstoff ist im Netzwerk aktiv. Klicken Sie auf eine verbundene Farblinie, um die genaue Wechselwirkung mit der Partnersubstanz einzusehen.";
+            pDesc.innerText = "Dieser Wirkstoff ist im Netzwerk aktiv. Wählen Sie verbundene Farblinien für detaillierte Wechselwirkungen aus.";
           }}
         }});
       </script>
@@ -639,7 +646,6 @@ def render_interaction_network(active_substances, detected_interactions, synergi
     </html>
     """
     components.html(html_code, height=440)
-
 
 @st.cache_data(ttl=3600)
 def load_cached_catalog():

@@ -1,12 +1,12 @@
-\# 💊 MediCheck – Klinischer Medikations- \& Interaktions-Check
+\# 💊 MediCheck – Clinical Decision Support \& Interaction Radar
 
 
 
-\*\*MediCheck\*\* ist ein evidenzbasiertes Analysewerkzeug zur Erkennung von Arzneimittelwechselwirkungen, kumulativen Risiken (Multi-Drug Synergien), Phytopharmaka- und Nahrungsmittelkonflikten sowie Resorptionsstörungen.
+\*\*MediCheck\*\* ist ein evidenzbasiertes, klinisches Entscheidungsunterstützungssystem (Clinical Decision Support System, CDSS) zur Analyse komplexer Polymedikationsregime, arzneimittelbezogener Probleme (DRPs) und lebensmittelbedingter Interaktionen.
 
 
 
-Das System kombiniert einen lokalen SQLite-Kern, ein dynamisches WHO-ATC- und Phyto-Regelwerk sowie eine Fallback-Anbindung an die offizielle \*\*openFDA API\*\*.
+Das System kombiniert einen mehrstufigen Analyse-Pipeline-Ansatz mit leitlinienbasierter Geriatrie- und Nephrologie-Prüfung (\*\*Priscus 2.0\*\*, \*\*eGFR-Schwellenwerte\*\*, \*\*Triple-Whammy-Erkennung\*\*) sowie einem interaktiven Netzwerk-Radar zur visuellen Risikobewertung.
 
 
 
@@ -14,41 +14,53 @@ Das System kombiniert einen lokalen SQLite-Kern, ein dynamisches WHO-ATC- und Ph
 
 
 
-\## 🌟 Kernfunktionen
+\## 🎯 Kernfunktionen
 
 
 
-\* \*\*4-Stufen-Prüfkaskade:\*\*
+\- \*\*Multi-Stage Interaction Engine:\*\*
 
-&#x20; 1. \*\*SQLite-Cache:\*\* Sofortige Rückgabe validierter Paare ohne Netzwerklatenz.
+&#x20; 1. \*Stufe 1:\* SQLite-Volltext-Cache mit verifizierten pharmakologischen Interaktionspaaren.
 
-&#x20; 2. \*\*Phyto- \& Food-Engine:\*\* Identifikation kritischer Interaktionen mit Phytopharmaka, Mineralstoffen und Nahrungsmitteln (z. B. Johanniskraut, Grapefruitsaft, Ginkgo, Knoblauch, Lakritze, Calcium/Milchprodukte, Eisen, Magnesium, CBD).
+&#x20; 2. \*Stufe 2:\* Kationen- \& Phytotherapie-Regelwerk (Chelatbildung mit $Ca^{2+}$, $Fe^{2+/3+}$, $Mg^{2+}$; CYP3A4-Induktion durch Johanniskraut/Grapefruit).
 
-&#x20; 3. \*\*WHO-ATC Klassenregeln:\*\* Erkennung übergeordneter pharmakodynamischer Klassenkonflikte (z. B. RAAS-Blocker + kaliumsparende Diuretika, Antikoagulation + NSAR, Opioide + Benzodiazepine, Digoxin + P-gp-Inhibitoren).
+&#x20; 3. \*Stufe 3:\* WHO-ATC-Klassenabgleich für breite Substanzgruppen (z. B. ACE-Hemmer, Sartane, Schleifendiuretika, NSAR).
 
-&#x20; 4. \*\*openFDA Live-Fallback:\*\* Dynamische Extraktion relevanter Warnhinweise aus US-FDA-Fachinformationen bei seltenen Kombinationen.
+&#x20; 4. \*Stufe 4:\* Live-Fallback auf die \*\*openFDA Drug Label API\*\* bei bisher nicht lokal annotierten Wirkstoffen.
 
-\* \*\*Klinische Differenzierung (Darreichungsform \& Dosis):\*\*
 
-&#x20; \* Unterscheidung zwischen topischer (z. B. Diclofenac-Gel, \~6 % systemische Bioverfügbarkeit) und oraler Applikation zur Vermeidung von Alert Fatigue.
 
-&#x20; \* Differenzierung zwischen Thrombozytenaggregationshemmung (ASS 100 mg) und analgetischer NSAR-Hochdosis (ASS ≥ 500 mg).
+\- \*\*Klinische Sonderlogiken \& Risikopopulationen:\*\*
 
-\* \*\*Multi-Drug Synergien \& Organtoxizität:\*\*
+&#x20; - \*\*Priscus 2.0 PIM-Check:\*\* Automatische Erkennung potenziell inadäquater Medikation bei Patienten $\\ge 65$ Jahren inklusive evidenzbasierter Therapiealternativen.
 
-&#x20; \* \*\*Triple-Whammy-Erkennung:\*\* Akutes Nephrotoxizitätsrisiko bei RAAS-Inhibitor + Diuretikum + oralem NSAR.
+&#x20; - \*\*Renale Dosisanpassung (eGFR):\*\* Frühzeitige Warnungen und Kontraindikationsprüfung bei eingeschränkter Nierenfunktion (z. B. Metformin bei $\\text{eGFR} < 30\\,\\text{ml/min}$, Spironolacton-Hyperkaliämierisiko).
 
-&#x20; \* \*\*Anticholinerge Last:\*\* Kumulatives Delir- und Sturzrisiko bei multiplen anticholinergen Wirkstoffen.
+&#x20; - \*\*Triple-Whammy-Erkennung:\*\* Alarmierung bei gleichzeitiger Gabe von RAAS-Hemmern, Diuretika und systemischen NSAR.
 
-&#x20; \* \*\*QTc-Verlängerung:\*\* Synergistische Hemmung myokardialer Kaliumkanäle (hERG) mit Risiko für Torsade-de-Pointes-Arrhythmien.
 
-&#x20; \* \*\*ZNS- \& Atemdepression:\*\* Kumulative Dämpfung über GABAerge Transmission und mu-Opioid-Signalwege.
 
-\* \*\*Strukturierter PDF-Gesprächsleitfaden:\*\*
+\- \*\*Interaktives Visual Network Radar:\*\*
 
-&#x20; \* Robuster Latin-1/FPDF-Export ohne Unicode-Artefakte.
+&#x20; - 2-Spalten-Split-Dashboard auf Basis von Vis.js Canvas ohne C-Abhängigkeiten.
 
-&#x20; \* Generierung zielgerichteter Leitfragen und Einnahmeabstandshinweise (z. B. 2–3 Stunden Abstand bei Chelatbildnern wie Eisen, Magnesium, Milch) für das Arztgespräch.
+&#x20; - Farblich kodierte Risikoknoten und Verbindungslinien mit Direkt-Inspektor.
+
+&#x20; - Zero-Conflict-State für unbedenkliche Kombinationen.
+
+
+
+\- \*\*Chronopharmakologischer Einnahmeplaner \& Labor-Ampel:\*\*
+
+&#x20; - Automatische zeitliche Separierung kritischer Substanzen (z. B. L-Thyroxin morgens nüchtern, Eisen/Calcium mittags).
+
+&#x20; - Priorisierte Labor- und Diagnostik-Empfehlungen für das Arztgespräch (z. B. Serum-Kalium, Kreatinin, EKG/QTc, Leberenzyme).
+
+
+
+\- \*\*Patienten- \& Arztberichte:\*\*
+
+&#x20; - Export als druckoptimiertes Dokument via nativer Browser-Print-CSS oder formatierter PDF-Download.
 
 
 
