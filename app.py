@@ -5,6 +5,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from fpdf import FPDF
 
+from pdf_generator import generate_full_clinical_pdf
 from drug_translator import translate_to_inn
 from bmp_parser import parse_medication_text
 from cache_manager import (
@@ -802,31 +803,17 @@ st.markdown("### 📥 Medikationsdossier & Export")
 
 
 def generate_pdf_report():
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "MediCheck - Klinischer Interaktionsbericht", ln=True, align="C")
-    pdf.ln(5)
-
-    pdf.set_font("Helvetica", size=10)
-    pdf.cell(0, 6, f"Patientenprofil: Alter {patient_age} Jahre | eGFR: {egfr_value} ml/min", ln=True)
-    pdf.cell(0, 6, f"Aktive Wirkstoffe: {', '.join([s.capitalize() for s in active_substances])}", ln=True)
-    pdf.ln(5)
-
-    if detected_interactions:
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Gefundene Wechselwirkungen:", ln=True)
-        pdf.set_font("Helvetica", size=9)
-        for item in detected_interactions:
-            d1, d2 = item["pair"]
-            pdf.cell(0, 6, f"[{item.get('severity')}] {d1.capitalize()} + {d2.capitalize()} ({item.get('system')})", ln=True)
-            pdf.multi_cell(0, 5, f"Wirkung: {item.get('effect')}")
-            if item.get("advice"):
-                pdf.multi_cell(0, 5, f"Empfehlung: {item.get('advice')}")
-            pdf.ln(2)
-
-    return pdf.output()
+    return generate_full_clinical_pdf(
+        patient_age=patient_age,
+        egfr_value=egfr_value,
+        active_substances=active_substances,
+        detected_interactions=detected_interactions,
+        synergies=synergies,
+        priscus_alerts=priscus_alerts,
+        renal_alerts=renal_alerts,
+        schedule=schedule,
+        lab_checklist=lab_checklist
+    )
 
 
 col_exp1, col_exp2 = st.columns(2)

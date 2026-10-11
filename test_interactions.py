@@ -211,3 +211,23 @@ def test_lab_monitoring_checklist_generation():
 
     qt_item = next(c for c in checklist if "EKG" in c["parameter"])
     assert qt_item["urgency"] == "Hoch"
+
+from pdf_generator import generate_full_clinical_pdf
+
+def test_pdf_report_generation_binary():
+    """Prueft die fehlerfreie Erzeugung des vollstaendigen PDF-Byte-Streams."""
+    drugs = ["Ramipril", "Ibuprofen", "Simvastatin"]
+    pdf_bytes = generate_full_clinical_pdf(
+        patient_age=72,
+        egfr_value=45,
+        active_substances=drugs,
+        detected_interactions=[{"pair": ("Ramipril", "Ibuprofen"), "severity": "Hoch", "system": "Niere", "effect": "Test", "advice": "Test"}],
+        synergies=[],
+        priscus_alerts=[],
+        renal_alerts=[],
+        schedule={"Morgens": ["Ramipril"]},
+        lab_checklist=[]
+    )
+    assert isinstance(pdf_bytes, bytes)
+    assert len(pdf_bytes) > 500
+    assert pdf_bytes.startswith(b"%PDF")
