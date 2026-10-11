@@ -228,24 +228,43 @@ def check_class_level_rules(drug_a, drug_b):
 
 
 def fetch_fda_interaction(drug_a, drug_b):
-    """Fallback: Fragt bei Bedarf die openFDA Drug Labeling API ab."""
+    """
+    Fragt bei Bedarf die openFDA Drug Labeling API ab und speichert
+    positive Treffer direkt lokal in SQLite, um Folgeanfragen zu vermeiden.
+    """
     da, db = drug_a.lower().strip(), drug_b.lower().strip()
     try:
         url = f"https://api.fda.gov/drug/label.json?search=drug_interactions:{da}+AND+openfda.brand_name:{db}&limit=1"
-        res = requests.get(url, timeout=3.5)
+        res = requests.get(url, timeout=3.0)
         if res.status_code == 200:
             data = res.json()
             if "results" in data and len(data["results"]) > 0:
-                return {
+                result = {
                     "pair": (drug_a, drug_b),
                     "severity": "Moderat",
                     "system": "openFDA Drug Label",
-                    "effect": f"Dokumentierter Hinweis in den FDA-Produktinformationen zu {drug_a} und {drug_b}.",
-                    "mechanism": "Pharmakokinetische oder dynamische Warnung laut Herstellerangaben.",
-                    "advice": "Fachinformation konsultieren und klinisches Befinden ueberwachen.",
-                    "source": "openFDA API Live"
+                    "effect": f"Dokumentierter Hinweis in den FDA-Produktinformationen zu {drug_a.capitalize()} und {drug_b.capitalize()}.",
+                    "mechanism": "Pharmakokinetische oder -dynamische Warnung laut FDA-Herstellerdossier.",
+                    "advice": "Klinische Relevanz pruefen und engmaschig auf unerwuenschte Wirkungen ueberwachen.",
+                    "source": "openFDA (Auto-Cache)"
                 }
+                # Positiven Treffer sofort lokal sichern fuer Offline- und High-Speed-Zugriff
+                try:
+                    save_to_cache(
+                        drug_a=da,
+                        drug_b=db,
+                        data_or_severity=result["severity"],
+                        system=result["system"],
+                        effect=result["effect"],
+                        mechanism=result["mechanism"],
+                        advice=result["advice"],
+                        source=result["source"]
+                    )
+                except Exception:
+                    pass
+                return result
     except Exception:
+        # Bei Timeout oder fehlendem Netz geraeuschlos abfangen
         pass
     return None
 
