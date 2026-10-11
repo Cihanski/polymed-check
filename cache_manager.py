@@ -465,26 +465,28 @@ def check_class_rules(drug_a, drug_b):
 
 def check_multidrug_synergies(active_drugs):
     """
-    Erkennt pharmakodynamische Synergien (z.B. kumulative QT-Verlängerung,
-    anticholinerge Last, ZNS-/Atemdepression) bei multiplen Arzneistoffen.
+    Erkennt pharmakodynamische und kinetische Synergien:
+    1. Kardiale QT-Verlaengerung
+    2. Anticholinerge Last
+    3. ZNS- & Atemdepression
+    4. Serotonin-Syndrom (NEU)
+    5. DOAK-Blutungsrisiko via CYP3A4/P-gp (NEU)
     """
     synergies = []
     if len(active_drugs) < 2:
         return synergies
 
-    # Hilfsfunktion zur flexiblen Namensprüfung (erkennt sowohl INN als auch DE-Namen)
     def match_substance(drug_name, target_keywords):
         d_lower = drug_name.lower()
         return any(k.lower() in d_lower for k in target_keywords)
 
-    # 1. Kardiale QT-Verlängerung
+    # 1. Kardiale QT-Verlaengerung
     qt_keywords = [
         "ciprofloxacin", "levofloxacin", "moxifloxacin", 
         "amiodaron", "amiodarone", "sotalol", "dronedaron", "dronedarone",
         "clarithromycin", "erythromycin", "azithromycin",
         "haloperidol", "citalopram", "escitalopram", "methadon", "methadone"
     ]
-    
     matched_qt = []
     for d in active_drugs:
         atc_codes = get_all_atc_codes(d)
@@ -548,6 +550,50 @@ def check_multidrug_synergies(active_drugs):
             "drugs": matched_sed,
             "effect": "Potenzierte ZNS-Daempfung, erhoehte Sturzgefahr und kritisches Risiko einer zentralen Atemdepression.",
             "mechanism": "Synergistische Daempfung des Atemzentrums ueber GABA_A- und mu-Opioid-Rezeptor-Signalwege."
+        })
+
+    # 4. Serotonin-Syndrom (NEU)
+    serotonin_keywords = [
+        "citalopram", "escitalopram", "sertralin", "sertraline", "fluoxetin", "fluoxetine",
+        "paroxetin", "paroxetine", "venlafaxin", "venlafaxine", "duloxetin", "duloxetine",
+        "tramadol", "tilidin", "fentanyl", "sumatriptan", "zolmitriptan", "johanniskraut",
+        "hypericum", "linezolid", "moclobemid", "moclobemide"
+    ]
+    matched_sero = []
+    for d in active_drugs:
+        atc_codes = get_all_atc_codes(d)
+        is_sero_atc = any(c.startswith("N06AB") or c.startswith("N06AX") for c in atc_codes)
+        if match_substance(d, serotonin_keywords) or is_sero_atc:
+            if d not in matched_sero:
+                matched_sero.append(d)
+
+    if len(matched_sero) >= 2:
+        synergies.append({
+            "type": "Serotonin-Syndrom",
+            "title": "Kritisches Serotonin-Syndrom-Risiko",
+            "severity": "Hoch",
+            "drugs": matched_sero,
+            "effect": "Potenziell lebensbedrohliche serotonerge Ueberstimulation: Hyperthermie, Myoklonien, Tremor, autonome Instabilitaet und Verwirrtheit.",
+            "mechanism": "Additive Erhoehung der intrasynaptischen Serotoninkonzentration ueber Wiederaufnahmehemmung (SERT) und/oder MAO-Hemmung."
+        })
+
+    # 5. DOAK-Blutungsrisiko via CYP3A4 / P-gp (NEU)
+    doac_keywords = ["apixaban", "rivaroxaban", "edoxaban", "dabigatran"]
+    strong_inhibitor_keywords = [
+        "clarithromycin", "erythromycin", "itraconazol", "itraconazole",
+        "ketoconazol", "ketoconazole", "verapamil", "diltiazem", "dronedaron"
+    ]
+    matched_doac = [d for d in active_drugs if match_substance(d, doac_keywords)]
+    matched_inhibitor = [d for d in active_drugs if match_substance(d, strong_inhibitor_keywords)]
+
+    if matched_doac and matched_inhibitor:
+        synergies.append({
+            "type": "DOAK-Interaktion",
+            "title": "Akutes DOAK-Blutungsrisiko (CYP3A4 / P-gp-Inhibition)",
+            "severity": "Hoch",
+            "drugs": matched_doac + matched_inhibitor,
+            "effect": "Massiver Anstieg der Plasmaspiegel des oralen Antikoagulans mit erhoehtem Risiko schwerer gatrointestinaler oder intrakranieller Blutungen.",
+            "mechanism": "Kompetitive Inhibition des intestinalen/hepatischen Effluxtransporters P-Glykoprotein (P-gp) und des Cytochrom-P450-Enzyms CYP3A4."
         })
 
     return synergies

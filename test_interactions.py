@@ -169,3 +169,26 @@ def test_intake_schedule_diuretic_morning():
     schedule = generate_intake_schedule(drugs)
     breakfast = schedule.get("Morgens (zum Frühstück)", [])
     assert any("torasemid" in item["drug"].lower() for item in breakfast)
+
+def test_synergy_serotonin_syndrome():
+    """Prueft Erkennung des Serotonin-Syndroms bei SSRI + Opioid/Triptan."""
+    raw_drugs = ["Sertralin", "Tramadol"]
+    drugs = [translate_to_inn(d) or d.lower() for d in raw_drugs]
+    syn = check_multidrug_synergies(drugs)
+    types = [s["type"] for s in syn]
+    assert "Serotonin-Syndrom" in types
+    
+    match = next(s for s in syn if s["type"] == "Serotonin-Syndrom")
+    assert match["severity"] == "Hoch"
+
+
+def test_synergy_doac_bleeding_risk():
+    """Prueft DOAK-Spiegelerhoehung via P-gp/CYP3A4-Hemmung."""
+    raw_drugs = ["Apixaban", "Clarithromycin"]
+    drugs = [translate_to_inn(d) or d.lower() for d in raw_drugs]
+    syn = check_multidrug_synergies(drugs)
+    types = [s["type"] for s in syn]
+    assert "DOAK-Interaktion" in types
+    
+    match = next(s for s in syn if s["type"] == "DOAK-Interaktion")
+    assert match["severity"] == "Hoch"
