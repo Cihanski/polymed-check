@@ -7,7 +7,7 @@ import re
 from itertools import combinations
 from datetime import datetime
 
-# Sicherer Import fuer FPDF (faengt Windows-Sicherheitsblockaden / DLL-Fehler ab)
+# Sicherer Import fuer FPDF
 FPDF_AVAILABLE = False
 try:
     from fpdf import FPDF
@@ -22,6 +22,7 @@ from cache_manager import (
     check_multidrug_synergies,
     check_priscus_pim,
     check_renal_risks,
+    generate_intake_schedule,
     get_all_atc_codes,
     get_drug_pharmacology,
     save_to_cache, 
@@ -47,16 +48,17 @@ st.markdown("""
         border: 1px solid #e2e8f0;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
         margin-bottom: 20px;
+        color: #1e293b !important;
     }
     .metric-title {
         margin: 0 0 8px 0; 
-        color: #1e293b; 
+        color: #1e293b !important; 
         font-size: 0.95rem; 
         font-weight: 600;
     }
     .metric-desc {
         margin: 8px 0 0 0; 
-        color: #64748b; 
+        color: #64748b !important; 
         font-size: 0.85rem;
     }
     .status-badge {
@@ -69,37 +71,37 @@ st.markdown("""
     }
     .badge-high {
         background-color: #fee2e2;
-        color: #991b1b;
+        color: #991b1b !important;
         border: 1px solid #fecaca;
     }
     .badge-medium {
         background-color: #fef3c7;
-        color: #92400e;
+        color: #92400e !important;
         border: 1px solid #fde68a;
     }
     .badge-organ {
         background-color: #e0f2fe;
-        color: #075985;
+        color: #075985 !important;
         border: 1px solid #bae6fd;
     }
     .badge-db {
         background-color: #f3e8ff;
-        color: #6b21a8;
+        color: #6b21a8 !important;
         border: 1px solid #e9d5ff;
     }
     .badge-class {
         background-color: #e0e7ff;
-        color: #3730a3;
+        color: #3730a3 !important;
         border: 1px solid #c7d2fe;
     }
     .badge-phyto {
         background-color: #dcfce7;
-        color: #166534;
+        color: #166534 !important;
         border: 1px solid #bbf7d0;
     }
     .badge-fda {
         background-color: #ecfdf5;
-        color: #065f46;
+        color: #065f46 !important;
         border: 1px solid #a7f3d0;
     }
     .interaction-card {
@@ -112,6 +114,7 @@ st.markdown("""
         border-top: 1px solid #f1f5f9;
         border-right: 1px solid #f1f5f9;
         border-bottom: 1px solid #f1f5f9;
+        color: #1e293b !important;
     }
     .interaction-card.high {
         border-left-color: #ef4444;
@@ -126,7 +129,7 @@ st.markdown("""
         padding: 8px 12px;
         margin-top: 8px;
         font-size: 0.90rem;
-        color: #166534;
+        color: #166534 !important;
     }
     .combo-box {
         background-color: #f8fafc;
@@ -135,7 +138,7 @@ st.markdown("""
         padding: 10px 14px;
         margin-bottom: 16px;
         font-size: 0.90rem;
-        color: #334155;
+        color: #334155 !important;
     }
     .profile-card {
         background-color: #ffffff;
@@ -144,6 +147,7 @@ st.markdown("""
         padding: 14px 18px;
         margin-bottom: 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        color: #1e293b !important;
     }
     .priscus-card {
         background-color: #fefce8;
@@ -152,6 +156,7 @@ st.markdown("""
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
+        color: #1e293b !important;
     }
     .renal-card {
         background-color: #fff7ed;
@@ -160,6 +165,22 @@ st.markdown("""
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
+        color: #1e293b !important;
+    }
+    .schedule-card {
+        background-color: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-left: 6px solid #2563eb;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        color: #0f172a !important;
+    }
+    .schedule-card strong {
+        color: #0f172a !important;
+    }
+    .schedule-card li {
+        color: #334155 !important;
     }
     .monitoring-card {
         background-color: #f0f9ff;
@@ -168,6 +189,7 @@ st.markdown("""
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 20px;
+        color: #1e293b !important;
     }
     .synergy-card {
         background-color: #fff1f2;
@@ -176,6 +198,7 @@ st.markdown("""
         border-radius: 8px;
         padding: 16px 20px;
         margin-bottom: 16px;
+        color: #1e293b !important;
     }
     .disclaimer-banner {
         background-color: #eff6ff;
@@ -183,7 +206,7 @@ st.markdown("""
         border-radius: 6px;
         padding: 12px 16px;
         margin-bottom: 20px;
-        color: #1e3a8a;
+        color: #1e3a8a !important;
         font-size: 0.9rem;
     }
     .disclaimer-box {
@@ -192,7 +215,7 @@ st.markdown("""
         border-radius: 8px;
         padding: 16px;
         font-size: 0.88rem;
-        color: #475569;
+        color: #475569 !important;
         margin-top: 30px;
     }
 </style>
@@ -200,7 +223,6 @@ st.markdown("""
 
 
 def clean_text_for_pdf(text):
-    """Entfernt Emojis und codiert sicher fuer FPDF Latin-1."""
     if not text:
         return ""
     replacements = {
@@ -229,7 +251,6 @@ def clean_text_for_pdf(text):
 
 
 def get_practical_advice(effect_text, mechanism_text, system_name):
-    """Generiert praxisnahe Handlungsempfehlungen basierend auf dem Wirkmechanismus."""
     comb_text = f"{effect_text} {mechanism_text} {system_name}".lower()
     
     if "chelat" in comb_text or "calcium" in comb_text or "resorption" in comb_text or "eisen" in comb_text or "magnesium" in comb_text:
@@ -247,7 +268,6 @@ def get_practical_advice(effect_text, mechanism_text, system_name):
 
 
 def get_aggregated_monitoring(active_drugs, detected_interactions, synergies):
-    """Aggregiert notwendige Kontrollparameter ueber alle aktiven Substanzen."""
     params = set()
     all_codes = []
     for d in active_drugs:
@@ -281,14 +301,12 @@ def get_aggregated_monitoring(active_drugs, detected_interactions, synergies):
 
 @st.cache_data(ttl=3600)
 def load_cached_catalog():
-    """Laedt den gesamten Katalog in den Cache."""
     base_catalog = set(get_autocomplete_catalog())
     cached_drugs = set(get_all_cached_drugs())
     return sorted(list(base_catalog.union(cached_drugs)))
 
 
 def fetch_fda_interaction(drug_a, drug_b):
-    """Fallback: openFDA drug label API."""
     inn_a = translate_to_inn(drug_a)
     inn_b = translate_to_inn(drug_b)
     
@@ -329,7 +347,6 @@ def fetch_fda_interaction(drug_a, drug_b):
 
 
 def find_interaction_smart(drug_a, drug_b):
-    """4-Stufen-Pruefkaskade: Cache -> Phyto/Nahrung -> ATC-Klassen -> openFDA."""
     cached = check_cache(drug_a, drug_b)
     if cached:
         return cached
@@ -350,8 +367,7 @@ def find_interaction_smart(drug_a, drug_b):
     return None
 
 
-def generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts):
-    """Fallback-Report als formatierter Text, falls FPDF blockiert wird."""
+def generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts, schedule):
     lines = []
     lines.append("=" * 70)
     lines.append("MediCheck - Medikations- & Gespraechsleitfaden")
@@ -366,6 +382,14 @@ def generate_text_report(selected_drugs, active_substances, drug_settings, inter
         lines.append(f"- {d}{inn_info}{setting_info}")
     lines.append("")
 
+    if schedule:
+        lines.append("2. Empfohlener Einnahme-Tageszeitplan:")
+        for time_slot, items in schedule.items():
+            lines.append(f"[{time_slot}]")
+            for item in items:
+                lines.append(f"  * {item['drug'].capitalize()} - {item['note']}")
+        lines.append("")
+
     if is_triple or synergies or priscus_alerts or renal_alerts:
         lines.append("WARNUNG: Klinische Risiken & Sonderpopulationen:")
         if is_triple:
@@ -378,7 +402,7 @@ def generate_text_report(selected_drugs, active_substances, drug_settings, inter
             lines.append(f"- Nierenfunktion ({r['drug'].capitalize()}): {r['message']}")
         lines.append("")
 
-    lines.append(f"2. Gefundene Einzelwechselwirkungen ({len(interactions)} Befunde):")
+    lines.append(f"3. Gefundene Einzelwechselwirkungen ({len(interactions)} Befunde):")
     if not interactions:
         lines.append("Keine kritischen Konflikte dokumentiert.")
     else:
@@ -387,29 +411,25 @@ def generate_text_report(selected_drugs, active_substances, drug_settings, inter
             lines.append(f"{idx}. {d1.capitalize()} + {d2.capitalize()} [{item['severity']} | {item['system']}]")
             lines.append(f"   Effekt: {item['effect']}")
             lines.append(f"   Details: {item['mechanism']}")
-            advice = get_practical_advice(item.get("effect", ""), item.get("mechanism", ""), item.get("system", ""))
-            if advice:
-                lines.append(f"   Empfehlung: {advice}")
     lines.append("")
 
     if monitoring_params:
-        lines.append("3. Empfohlene Laborkontrollen & Diagnostik:")
+        lines.append("4. Empfohlene Laborkontrollen & Diagnostik:")
         for param in monitoring_params:
             lines.append(f"* {param}")
         lines.append("")
 
-    lines.append("4. Leitfragen fuer das Arztgespraech:")
+    lines.append("5. Leitfragen fuer das Arztgespraech:")
     lines.append("- Gibt es schonendere Alternativen?")
     lines.append("- Sollten die empfohlenen Laborparameter kontrolliert werden?")
-    lines.append("- Koennen Einnahmeabstaende angepasst werden?")
+    lines.append("- Passen die Einnahmezeiten zum Tagesablauf?")
     lines.append("\nHaftungsausschluss: Dient ausschliesslich zur Gespraechsvorbereitung. Keine Therapieempfehlung.")
     return "\n".join(lines).encode("utf-8")
 
 
-def create_pdf_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts):
-    """Erzeugt einen sauberen PDF-Report inklusive Priscus- und Nierenrisiken."""
+def create_pdf_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts, schedule):
     if not FPDF_AVAILABLE:
-        return generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts)
+        return generate_text_report(selected_drugs, active_substances, drug_settings, interactions, is_triple, synergies, monitoring_params, priscus_alerts, renal_alerts, schedule)
 
     pdf = FPDF()
     pdf.add_page()
@@ -425,19 +445,29 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
     
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(20, 20, 20)
-    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate & aufgeschluesselte Wirkstoffe:"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("1. Erfasste Praeparate:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=10)
     for d in selected_drugs:
         inns = resolve_drug_to_inns(d)
-        if len(inns) > 1:
-            inn_info = f" [Fixkombination: {' + '.join([i.capitalize() for i in inns])}]"
-        else:
-            inn = inns[0]
-            inn_info = f" [Wirkstoff: {inn.capitalize()}]" if inn.lower() != d.lower() and not d.startswith("PHYTO_") else ""
-        
+        inn_info = f" [Fixkombination: {' + '.join([i.capitalize() for i in inns])}]" if len(inns) > 1 else ""
         setting_info = f" ({drug_settings[d]})" if d in drug_settings else ""
         pdf.cell(width, 6, clean_text_for_pdf(f"- {d}{inn_info}{setting_info}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
+
+    if schedule:
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(37, 99, 235)
+        pdf.cell(width, 8, clean_text_for_pdf("2. Empfohlener Einnahme-Tageszeitplan:"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", size=9)
+        pdf.set_text_color(20, 20, 20)
+        for time_slot, items in schedule.items():
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(width, 6, clean_text_for_pdf(f"[{time_slot}]"), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", size=9)
+            for item in items:
+                pdf.multi_cell(width, 5, clean_text_for_pdf(f"* {item['drug'].capitalize()} - {item['note']}"), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+        pdf.ln(3)
     
     if is_triple or synergies or priscus_alerts or renal_alerts:
         pdf.set_fill_color(254, 226, 226)
@@ -462,32 +492,26 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
         pdf.set_text_color(20, 20, 20)
     
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, clean_text_for_pdf(f"2. Gefundene Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf(f"3. Einzelwechselwirkungen ({len(interactions)} Befunde):"), new_x="LMARGIN", new_y="NEXT")
     
     if len(interactions) == 0:
         pdf.set_font("Helvetica", size=10)
-        pdf.cell(width, 6, clean_text_for_pdf("In den hinterlegten Referenzdatenbanken sind keine kritischen Konflikte dokumentiert."), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(width, 6, clean_text_for_pdf("Keine dokumentierten Konflikte gefunden."), new_x="LMARGIN", new_y="NEXT")
     else:
         for idx, item in enumerate(interactions, start=1):
             d1, d2 = item["pair"]
             pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(width, 6, clean_text_for_pdf(f"{idx}. {d1.capitalize()} + {d2.capitalize()} [Risiko: {item['severity']} | {item['system']}]"), new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(width, 6, clean_text_for_pdf(f"{idx}. {d1.capitalize()} + {d2.capitalize()} [{item['severity']} | {item['system']}]"), new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", size=9)
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"Effekt: {item['effect']}"), new_x="LMARGIN", new_y="NEXT")
             pdf.multi_cell(width, 5, clean_text_for_pdf(f"Details: {item['mechanism']}"), new_x="LMARGIN", new_y="NEXT")
-            
-            advice = get_practical_advice(item.get("effect", ""), item.get("mechanism", ""), item.get("system", ""))
-            if advice:
-                pdf.set_text_color(22, 101, 52)
-                pdf.multi_cell(width, 5, clean_text_for_pdf(f"Empfehlung: {advice}"), new_x="LMARGIN", new_y="NEXT")
-                pdf.set_text_color(20, 20, 20)
             pdf.ln(2)
             
     if monitoring_params:
         pdf.ln(2)
         pdf.set_font("Helvetica", "B", 12)
         pdf.set_text_color(2, 132, 199)
-        pdf.cell(width, 8, clean_text_for_pdf("3. Empfohlene Laborkontrollen & Diagnostik:"), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(width, 8, clean_text_for_pdf("4. Empfohlene Laborkontrollen & Diagnostik:"), new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", size=9)
         pdf.set_text_color(20, 20, 20)
         for param in monitoring_params:
@@ -496,19 +520,19 @@ def create_pdf_report(selected_drugs, active_substances, drug_settings, interact
 
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(width, 8, clean_text_for_pdf("4. Leitfragen fuer das Arztgespraech:"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(width, 8, clean_text_for_pdf("5. Leitfragen fuer das Arztgespraech:"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", size=9)
     fragen_text = (
         "- 'Gibt es fuer die verordneten Praeparate schonendere Alternativen?'\n"
-        "- 'Sollten die oben aufgefuehrten Laborwerte (z. B. Elektrolyte, Nierenfunktion, EKG) kontrolliert werden?'\n"
-        "- 'Koennen Einnahmezeitpunkte oder Abstaende angepasst werden (z. B. bei Chelatbildnern wie Milch/Mineralstoffen)?'"
+        "- 'Sollten die empfohlenen Laborparameter kontrolliert werden?'\n"
+        "- 'Passt der Einnahmezeitplan optimal zu meinen Lebensgewohnheiten?'"
     )
     pdf.multi_cell(width, 5, clean_text_for_pdf(fragen_text), new_x="LMARGIN", new_y="NEXT")
     
     pdf.ln(4)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(width, 4, clean_text_for_pdf("Haftungsausschluss: Dieses Dokument dient ausschliesslich zur Gespraechsvorbereitung. Es stellt keine Therapieempfehlung dar. Medikamente niemals eigenmaechtig absetzen."), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(width, 4, clean_text_for_pdf("Haftungsausschluss: Dient ausschliesslich zur Gespraechsvorbereitung. Keine Therapieempfehlung."), new_x="LMARGIN", new_y="NEXT")
     
     return bytes(pdf.output())
 
@@ -527,7 +551,7 @@ st.markdown("""
 
 st.caption(f"Arzneistoffkatalog: **{len(all_available_options):,} Substanzen & Nahrungsmittel**. Regelwerk: **{total_rules} aktive Klassen- & Phyto-Regeln** + **{total_db} Einzelwechselwirkungen**.")
 
-# ----------------- Patientenprofil (Alter & Nierenfunktion) -----------------
+# ----------------- Patientenprofil -----------------
 with st.expander("👤 Patientenprofil & Sonderpopulationen (Optional: Alter & Nierenfunktion)", expanded=False):
     col_pat1, col_pat2 = st.columns(2)
     with col_pat1:
@@ -555,7 +579,7 @@ selected_drugs = st.multiselect(
     options=all_available_options,
     default=valid_defaults,
     placeholder="Buchstaben eingeben (z. B. 'Diazepam', 'Metformin', 'Spironolactone', 'Co-Diovan')...",
-    help="Erkennt Einzelwirkstoffe, Markennamen und spaltet Fixkombinationen (z. B. Co-Diovan) automatisch auf."
+    help="Erkennt Einzelwirkstoffe, Markennamen und spaltet Fixkombinationen automatisch auf."
 )
 
 # ----------------- Aufspaltung von Kombinationspraeparaten -----------------
@@ -652,9 +676,9 @@ if len(active_substances) >= 2:
 
 multidrug_synergies = check_multidrug_synergies(active_substances) if len(active_substances) >= 2 else []
 
-# Priscus PIM & Nierenrisiken berechnen
 priscus_alerts = check_priscus_pim(active_substances) if is_elderly else []
 renal_alerts = check_renal_risks(active_substances, egfr_value)
+intake_schedule = generate_intake_schedule(active_substances) if len(active_substances) > 0 else {}
 
 normalized_drugs = [translate_to_inn(d) for d in active_substances]
 has_raas = any(d in normalized_drugs for d in ["ramipril", "candesartan", "enalapril", "valsartan", "lisinopril"])
@@ -766,6 +790,22 @@ for syn in multidrug_synergies:
     </div>
     """, unsafe_allow_html=True)
 
+# ----------------- Einnahme-Tageszeitplaner -----------------
+if intake_schedule:
+    schedule_html = ""
+    for time_slot, items in intake_schedule.items():
+        schedule_html += f"<div style='margin-bottom: 12px;'><strong style='color: #1e293b; font-size: 0.96rem;'>⏱️ {time_slot}:</strong><ul style='margin: 4px 0 0 0; padding-left: 20px; font-size: 0.92rem; color: #334155;'>"
+        for item in items:
+            schedule_html += f"<li style='margin-bottom: 4px;'><strong style='color: #0f172a;'>{item['drug'].capitalize()}:</strong> <span style='color: #475569;'>{item['note']}</span></li>"
+        schedule_html += "</ul></div>"
+
+    st.markdown(f"""
+    <div class="schedule-card">
+        <h4 style="margin: 0 0 12px 0; color: #1e40af;">📅 Chronopharmakologischer Einnahmeplan (Tagesplaner)</h4>
+        {schedule_html}
+    </div>
+    """, unsafe_allow_html=True)
+
 # ----------------- Labor- & Diagnostik-Ampel -----------------
 monitoring_list = get_aggregated_monitoring(active_substances, detected_interactions, multidrug_synergies)
 if monitoring_list:
@@ -801,7 +841,7 @@ if len(active_substances) > 0:
                 """, unsafe_allow_html=True)
 
 if len(active_substances) >= 1:
-    report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list, priscus_alerts, renal_alerts)
+    report_bytes = create_pdf_report(selected_drugs, active_substances, drug_settings, detected_interactions, is_triple_whammy, multidrug_synergies, monitoring_list, priscus_alerts, renal_alerts, intake_schedule)
     file_ext = "pdf" if FPDF_AVAILABLE else "txt"
     mime_type = "application/pdf" if FPDF_AVAILABLE else "text/plain"
     

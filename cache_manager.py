@@ -5,7 +5,7 @@ import re
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "interactions.db")
 
-# Priscus 2.0 / PIM-Referenzkatalog (Potenziell inadaequate Medikation im Alter)
+# Priscus 2.0 / PIM-Referenzkatalog
 PRISCUS_PIM_CATALOG = {
     "diazepam": {
         "reason": "Lange Eliminationshalbwertszeit (bis 100 h) und aktive Metaboliten.",
@@ -44,7 +44,7 @@ PRISCUS_PIM_CATALOG = {
     }
 }
 
-# Substanzen mit strenger Dosisanpassung / Kontraindikation bei Niereninsuffizienz
+# Substanzen mit renaler Dosisanpassung
 RENAL_DOSE_CATALOG = {
     "metformin": {
         "cutoff_severe": 30,
@@ -80,7 +80,7 @@ RENAL_DOSE_CATALOG = {
 
 
 def init_db():
-    """Erstellt alle benoetigten Tabellen und initialisiert Kern-Klassenregeln."""
+    """Erstellt Tabellen und Klassenregeln."""
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -174,13 +174,11 @@ init_db()
 
 
 def get_cache_key(drug_a, drug_b):
-    """Sortiert zwei Wirkstoffnamen alphabetisch."""
     sorted_pair = sorted([drug_a.strip().lower(), drug_b.strip().lower()])
     return f"{sorted_pair[0]}___{sorted_pair[1]}"
 
 
 def check_cache(drug_a, drug_b):
-    """Stufe 1: Direkter Cache-Lookup."""
     key = get_cache_key(drug_a, drug_b)
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
@@ -203,7 +201,6 @@ def check_cache(drug_a, drug_b):
 
 
 def get_all_atc_codes(drug_name):
-    """Ermittelt alle hinterlegten ATC- oder Phyto-Codes fuer eine Substanz."""
     if not drug_name:
         return []
 
@@ -249,13 +246,11 @@ def get_all_atc_codes(drug_name):
 
 
 def get_atc_code(drug_name):
-    """Gibt den am hoechsten priorisierten ATC-Code zurueck."""
     codes = get_all_atc_codes(drug_name)
     return codes[0] if codes else None
 
 
 def get_drug_pharmacology(drug_name):
-    """Liest pharmakologische Details aus der Datenbank aus."""
     if not drug_name:
         return None
 
@@ -288,8 +283,80 @@ def get_drug_pharmacology(drug_name):
     return None
 
 
+def generate_intake_schedule(active_drugs):
+    """
+    Erstellt einen chronopharmakologisch optimierten Einnahmeplan
+    unter Beruecksichtigung von Chelatbildungsabstaenden und Organpeaks.
+    """
+    schedule = {
+        "Morgens (nüchtern / 30 Min. vor dem Frühstück)": [],
+        "Morgens (zum Frühstück)": [],
+        "Mittags (mit Mahlzeit / 2-3h Abstand zu Mineralstoffen)": [],
+        "Abends (zum Abendessen)": [],
+        "Zur Nacht (vor dem Schlafen)": []
+    }
+
+    has_chelator = any(d.lower() in ["milchprodukte & calciumreiches wasser 🥛", "eisenpraeparate / eisentabletten (fe2+/fe3+) 🩸", "magnesiumpraeparate (hochdosiert) ⚡"] or "iron" in d.lower() or "calcium" in d.lower() for d in active_drugs)
+
+    for drug in active_drugs:
+        d_lower = drug.lower().strip()
+        codes = get_all_atc_codes(drug)
+        primary_code = codes[0] if codes else ""
+
+        # 1. Schilddruese & Bisphosphonate -> Morgens nuechtern
+        if primary_code.startswith("H03AA") or primary_code.startswith("M05BA") or "thyrox" in d_lower:
+            schedule["Morgens (nüchtern / 30 Min. vor dem Frühstück)"].append({
+                "drug": drug,
+                "note": "Nüchtern mit Leitungswasser (min. 30 Min. vor Kaffee/Frühstück). Unbedingt getrennt von Eisen/Calcium!"
+            })
+        # 2. Schleifendiuretika & Thiazide -> Morgens zum Fruehstueck (Nykturie-Vermeidung)
+        elif primary_code.startswith("C03") or "torasemid" in d_lower or "furosemid" in d_lower or "hydrochlorothiazid" in d_lower:
+            schedule["Morgens (zum Frühstück)"].append({
+                "drug": drug,
+                "note": "Morgens einnehmen, um nächtlichen Harndrang (Nykturie) zu vermeiden."
+            })
+        # 3. Blutdruck-Basismedikation (ACE/Sartane/Betablocker) -> Morgens
+        elif primary_code.startswith("C09") or primary_code.startswith("C07") or primary_code.startswith("C08"):
+            schedule["Morgens (zum Frühstück)"].append({
+                "drug": drug,
+                "note": "Regelmäßig zum Frühstück für stabilen 24h-Blutdruckverlauf."
+            })
+        # 4. Chelatbildner (Eisen, Mineralstoffe) -> Mittags (falls L-Thyroxin morgens eingenommen wird)
+        elif "eisen" in d_lower or "iron" in d_lower or primary_code == "PHYTO_IRON" or "magnesium" in d_lower:
+            schedule["Mittags (mit Mahlzeit / 2-3h Abstand zu Mineralstoffen)"].append({
+                "drug": drug,
+                "note": "Mindestens 2-3 Stunden zeitlicher Abstand zu L-Thyroxin und Antibiotika."
+            })
+        # 5. Fluorchinolone / Tetracycline -> Mittags
+        elif primary_code.startswith("J01M") or primary_code.startswith("J01AA"):
+            schedule["Mittags (mit Mahlzeit / 2-3h Abstand zu Mineralstoffen)"].append({
+                "drug": drug,
+                "note": "Mit reichlich Wasser. 2-3 Stunden Abstand zu Milch, Joghurt oder Mineralstoff-Tabletten."
+            })
+        # 6. Statine -> Abends (hoechste hepatische Enzymsynthese nachts)
+        elif primary_code.startswith("C10AA") or "statin" in d_lower:
+            schedule["Abends (zum Abendessen)"].append({
+                "drug": drug,
+                "note": "Optimale lipidsenkende Wirksamkeit bei abendlicher Einnahme."
+            })
+        # 7. Sedativa, Z-Substanzen & Hypnotika -> Zur Nacht
+        elif primary_code.startswith("N05C") or primary_code.startswith("N05BA") or "lorazepam" in d_lower or "diazepam" in d_lower or "zopiclon" in d_lower:
+            schedule["Zur Nacht (vor dem Schlafen)"].append({
+                "drug": drug,
+                "note": "Direkt vor dem Schlafengehen einnehmen. Sturzrisiko beim nächtlichen Aufstehen beachten!"
+            })
+        # Standard: Mittags oder Morgens
+        else:
+            schedule["Morgens (zum Frühstück)"].append({
+                "drug": drug,
+                "note": "Mit etwas Flüssigkeit zu oder nach der Mahlzeit."
+            })
+
+    # Leere Zeitschienen entfernen
+    return {k: v for k, v in schedule.items() if len(v) > 0}
+
+
 def check_priscus_pim(active_drugs):
-    """Prueft Wirkstoffe gegen den Priscus-2.0-PIM-Katalog fuer aeltere Patienten."""
     findings = []
     for d in active_drugs:
         d_lower = d.strip().lower()
@@ -305,7 +372,6 @@ def check_priscus_pim(active_drugs):
 
 
 def check_renal_risks(active_drugs, egfr):
-    """Bewertet Risiken und Dosisgrenzen basierend auf der glomerularen Filtrationsrate."""
     if egfr >= 60:
         return []
 
@@ -332,7 +398,6 @@ def check_renal_risks(active_drugs, egfr):
 
 
 def check_phytomed_rules(drug_a, drug_b):
-    """Prueft Interaktionen zwischen Phytopharmaka/Kationen und Arzneistoffen."""
     codes_a = get_all_atc_codes(drug_a)
     codes_b = get_all_atc_codes(drug_b)
 
@@ -366,7 +431,6 @@ def check_phytomed_rules(drug_a, drug_b):
 
 
 def check_class_rules(drug_a, drug_b):
-    """Stufe 2b: Prueft ATC-Gruppeninteraktionen."""
     codes_a = get_all_atc_codes(drug_a)
     codes_b = get_all_atc_codes(drug_b)
 
@@ -400,7 +464,6 @@ def check_class_rules(drug_a, drug_b):
 
 
 def check_multidrug_synergies(drug_list):
-    """Erkennt kumulative Risiken ueber die gesamte Medikationsliste."""
     synergies = []
     atc_map = {d: get_all_atc_codes(d) for d in drug_list}
 
@@ -461,7 +524,6 @@ def check_multidrug_synergies(drug_list):
 
 
 def save_to_cache(drug_a, drug_b, data):
-    """Speichert ein neu ermitteltes Analyseergebnis in SQLite."""
     key = get_cache_key(drug_a, drug_b)
     source = data.get("source", "SQLite-DB")
 
@@ -485,7 +547,6 @@ def save_to_cache(drug_a, drug_b, data):
 
 
 def get_total_cached_count():
-    """Gibt die Gesamtzahl aller hinterlegten Paar-Interaktionen zurueck."""
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
@@ -496,7 +557,6 @@ def get_total_cached_count():
 
 
 def get_total_class_rules_count():
-    """Gibt die Gesamtanzahl aktiver ATC- und Phyto-Regeln zurueck."""
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
@@ -510,7 +570,6 @@ def get_total_class_rules_count():
 
 
 def get_all_cached_drugs():
-    """Liest alle Substanzen fuer Autocomplete aus."""
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
