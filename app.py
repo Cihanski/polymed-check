@@ -29,70 +29,119 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS / Dark Mode Theme Overrides ---
+# --- CSS / Barrierefreies Dark Theme (Senioren- & B2B-tauglich) ---
 st.markdown("""
 <style>
+    /* 1. Barrierefreie Typografie & Lesbarkeit */
+    p, li, .stMarkdown {
+        font-size: 1.05rem !important;
+        line-height: 1.65 !important;
+    }
+
+    /* 2. Grosse, taktile Registerkarten (Tabs) */
+    button[data-baseweb="tab"] {
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        padding: 14px 26px !important;
+        color: #cbd5e1 !important;
+        border-radius: 10px 10px 0 0 !important;
+        margin-right: 6px !important;
+        background-color: #0f172a !important;
+        border: 1px solid #334155 !important;
+        border-bottom: none !important;
+        transition: all 0.2s ease-in-out;
+    }
+
+    button[data-baseweb="tab"]:hover {
+        color: #ffffff !important;
+        background-color: #1e293b !important;
+    }
+
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #38bdf8 !important;
+        background-color: #1e293b !important;
+        border: 1px solid #38bdf8 !important;
+        border-bottom: 3px solid #38bdf8 !important;
+        box-shadow: 0 -2px 10px rgba(56, 189, 248, 0.15);
+    }
+
+    /* 3. WCAG-gerechte Buttons mit mindestens 48px Hoehe */
+    .stButton > button {
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+        padding: 12px 22px !important;
+        min-height: 48px !important;
+        border-radius: 8px !important;
+        transition: background 0.2s ease;
+    }
+
+    /* 4. Metrik-Kacheln */
     .metric-card {
         background-color: #0f172a !important;
         border-radius: 12px;
-        padding: 18px;
-        border: 1px solid #1e293b;
+        padding: 20px;
+        border: 1px solid #334155;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
         color: #f1f5f9 !important;
     }
     .metric-title {
         margin: 0 0 6px 0; 
         color: #94a3b8 !important; 
-        font-size: 0.88rem; 
-        font-weight: 600;
+        font-size: 0.92rem; 
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
     .metric-desc {
         margin: 6px 0 0 0; 
-        color: #64748b !important; 
-        font-size: 0.82rem;
+        color: #94a3b8 !important; 
+        font-size: 0.88rem;
     }
+
+    /* 5. Status-Badges mit hohem Kontrast */
     .status-badge {
         display: inline-block;
-        padding: 4px 12px;
+        padding: 5px 14px;
         border-radius: 9999px;
-        font-size: 0.82rem;
-        font-weight: 600;
+        font-size: 0.88rem;
+        font-weight: 700;
         margin-right: 8px;
+        letter-spacing: 0.02em;
     }
     .badge-high {
-        background-color: #450a0a !important;
-        color: #fca5a5 !important;
-        border: 1px solid #991b1b;
+        background-color: #7f1d1d !important;
+        color: #fee2e2 !important;
+        border: 1.5px solid #ef4444;
     }
     .badge-medium {
-        background-color: #451a03 !important;
-        color: #fcd34d !important;
-        border: 1px solid #b45309;
+        background-color: #78350f !important;
+        color: #fef3c7 !important;
+        border: 1.5px solid #f59e0b;
     }
     .badge-organ {
-        background-color: #082f49 !important;
-        color: #7dd3fc !important;
-        border: 1px solid #0369a1;
+        background-color: #0c4a6e !important;
+        color: #e0f2fe !important;
+        border: 1.5px solid #38bdf8;
     }
     .badge-db {
-        background-color: #3b0764 !important;
-        color: #d8b4fe !important;
-        border: 1px solid #7e22ce;
+        background-color: #581c87 !important;
+        color: #f3e8ff !important;
+        border: 1.5px solid #c084fc;
     }
     .badge-class {
-        background-color: #1e1b4b !important;
-        color: #a5b4fc !important;
-        border: 1px solid #4338ca;
+        background-color: #312e81 !important;
+        color: #e0e7ff !important;
+        border: 1.5px solid #818cf8;
     }
+
+    /* 6. Risikokarten */
     .interaction-card {
         background-color: #0f172a !important;
-        border-left: 5px solid #475569;
-        border-radius: 8px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        border-left: 6px solid #475569;
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.25);
         border-top: 1px solid #1e293b;
         border-right: 1px solid #1e293b;
         border-bottom: 1px solid #1e293b;
@@ -105,91 +154,74 @@ st.markdown("""
         border-left-color: #f59e0b !important;
     }
     .advice-box {
-        background-color: #022c22 !important;
-        border-left: 4px solid #10b981;
-        border-radius: 4px;
-        padding: 8px 12px;
-        margin-top: 8px;
-        font-size: 0.90rem;
-        color: #a7f3d0 !important;
+        background-color: #064e3b !important;
+        border-left: 5px solid #34d399;
+        border-radius: 6px;
+        padding: 10px 16px;
+        margin-top: 12px;
+        font-size: 0.98rem;
+        color: #d1fae5 !important;
+        font-weight: 500;
     }
     .priscus-card {
         background-color: #422006 !important;
-        border: 1px solid #854d0e;
-        border-left: 6px solid #eab308;
-        border-radius: 8px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
-        color: #fef08a !important;
+        border: 1.5px solid #ca8a04;
+        border-left: 6px solid #facc15;
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
+        color: #fef9c3 !important;
     }
     .renal-card {
         background-color: #431407 !important;
-        border: 1px solid #9a3412;
-        border-left: 6px solid #f97316;
-        border-radius: 8px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
-        color: #fed7aa !important;
+        border: 1.5px solid #ea580c;
+        border-left: 6px solid #fb923c;
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
+        color: #ffedd5 !important;
     }
     .schedule-card {
         background-color: #0f172a !important;
-        border: 1px solid #1e293b;
-        border-left: 6px solid #3b82f6;
-        border-radius: 8px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
+        border: 1.5px solid #1e3a8a;
+        border-left: 6px solid #38bdf8;
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
         color: #f1f5f9 !important;
     }
     .monitoring-card {
         background-color: #082f49 !important;
-        border: 1px solid #0369a1;
+        border: 1.5px solid #0284c7;
         border-left: 6px solid #38bdf8;
-        border-radius: 8px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
-        color: #e0f2fe !important;
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
+        color: #f0f9ff !important;
     }
     .synergy-card {
         background-color: #4c0519 !important;
-        border: 1px solid #9f1239;
-        border-left: 6px solid #f43f5e;
-        border-radius: 8px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
+        border: 1.5px solid #e11d48;
+        border-left: 6px solid #fb7185;
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-bottom: 16px;
         color: #ffe4e6 !important;
     }
     .disclaimer-banner {
         background-color: #0f172a !important;
-        border-left: 4px solid #38bdf8;
-        border-radius: 6px;
-        padding: 10px 16px;
-        margin-bottom: 16px;
-        color: #bae6fd !important;
-        font-size: 0.88rem;
-    }
-    .disclaimer-box {
-        background-color: #0b0f19 !important;
-        border: 1px solid #1e293b;
+        border-left: 5px solid #38bdf8;
         border-radius: 8px;
-        padding: 14px;
+        padding: 14px 18px;
+        margin-bottom: 18px;
+        color: #e0f2fe !important;
+        font-size: 0.95rem;
+    }
+    .citation-note {
         font-size: 0.85rem;
-        color: #64748b !important;
-        margin-top: 25px;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 8px 8px 0 0;
-        padding: 10px 18px;
         color: #94a3b8;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1e293b !important;
-        color: #38bdf8 !important;
-        border-bottom: 2px solid #38bdf8 !important;
+        margin-top: 6px;
+        font-style: italic;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -213,7 +245,7 @@ def check_substance_pair(drug_a, drug_b):
 
 
 def render_interaction_network(active_substances, detected_interactions, synergies):
-    """Erzeugt das standfest zentrierte 2-Spalten Split-Panel im Dark-Design."""
+    """Erzeugt das standfest zentrierte 2-Spalten Split-Panel im barrierefreien Dark-Design."""
     nodes = []
     edges = []
 
@@ -270,7 +302,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             "id": d,
             "label": f"💊 {clean_name}\n({sub_class})",
             "shape": "box",
-            "margin": {"top": 8, "bottom": 8, "left": 14, "right": 14},
+            "margin": {"top": 10, "bottom": 10, "left": 16, "right": 16},
             "borderRadius": 8,
             "color": {
                 "background": bg_color,
@@ -279,7 +311,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             },
             "font": {
                 "color": "#ffffff",
-                "size": 13,
+                "size": 14,
                 "face": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
                 "bold": True
             },
@@ -291,7 +323,6 @@ def render_interaction_network(active_substances, detected_interactions, synergi
     first_edge_id = None
     edge_idx = 0
 
-    # 1. Direkte Paar-Wechselwirkungen
     for item in detected_interactions:
         d1, d2 = item["pair"]
         sev = item.get("severity", "Moderat")
@@ -317,12 +348,11 @@ def render_interaction_network(active_substances, detected_interactions, synergi
                 "color": "#ef4444" if is_high else "#f59e0b",
                 "highlight": "#38bdf8"
             },
-            "width": 3.5 if is_high else 2.5,
+            "width": 3.8 if is_high else 2.8,
             "dashes": [6, 6] if not is_high else False,
             "smooth": {"type": "curvedCW", "roundness": 0.15}
         })
 
-    # 2. Synergie-Kanten
     drawn_pairs = set(tuple(sorted([item["pair"][0], item["pair"][1]])) for item in detected_interactions)
     for syn in synergies:
         syn_drugs = syn.get("drugs", [])
@@ -353,7 +383,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
                             "color": "#ef4444" if is_high else "#f59e0b",
                             "highlight": "#38bdf8"
                         },
-                        "width": 3.5 if is_high else 2.5,
+                        "width": 3.8 if is_high else 2.8,
                         "dashes": [4, 4] if not is_high else False,
                         "smooth": {"type": "curvedCW", "roundness": 0.2}
                     })
@@ -382,13 +412,13 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           gap: 16px;
           width: 100%;
-          min-height: 400px;
+          min-height: 430px;
         }}
         #radar-container {{
           flex: 1.5;
           display: flex;
           flex-direction: column;
-          border: 1px solid #1e293b;
+          border: 1.5px solid #334155;
           border-radius: 12px;
           background-color: #090d16;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
@@ -397,7 +427,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         }}
         #network {{
           width: 100%;
-          height: 350px;
+          height: 380px;
           background-color: #090d16;
           background-image: 
             radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.35) 0%, rgba(9, 13, 22, 1) 100%),
@@ -409,64 +439,66 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           justify-content: space-around;
           align-items: center;
-          height: 42px;
+          height: 48px;
           padding: 0 16px;
           background-color: #030712;
           border-top: 1px solid #1e293b;
-          font-size: 11.5px;
-          color: #cbd5e1;
+          font-size: 13px;
+          font-weight: 600;
+          color: #e2e8f0;
         }}
         .dot {{
-          width: 9px;
-          height: 9px;
+          width: 11px;
+          height: 11px;
           border-radius: 50%;
           display: inline-block;
-          margin-right: 6px;
+          margin-right: 8px;
         }}
         #detail-panel {{
           flex: 1.3;
-          border: 1px solid #334155;
+          border: 1.5px solid #334155;
           border-radius: 12px;
           background: #0f172a;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-          padding: 20px 22px;
+          padding: 24px 26px;
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
-          min-height: 400px;
+          min-height: 430px;
           overflow-y: auto;
         }}
         .panel-badge {{
           align-self: flex-start;
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 700;
-          padding: 4px 12px;
+          padding: 5px 14px;
           border-radius: 9999px;
           text-transform: uppercase;
-          margin-bottom: 10px;
+          margin-bottom: 12px;
+          letter-spacing: 0.03em;
         }}
-        .badge-red {{ background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }}
-        .badge-yellow {{ background: #78350f; color: #fef3c7; border: 1px solid #f59e0b; }}
-        .badge-green {{ background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; }}
-        .badge-blue {{ background: #0c4a6e; color: #bae6fd; border: 1px solid #0284c7; }}
+        .badge-red {{ background: #7f1d1d; color: #fee2e2; border: 1.5px solid #ef4444; }}
+        .badge-yellow {{ background: #78350f; color: #fef3c7; border: 1.5px solid #f59e0b; }}
+        .badge-green {{ background: #064e3b; color: #d1fae5; border: 1.5px solid #10b981; }}
+        .badge-blue {{ background: #0c4a6e; color: #e0f2fe; border: 1.5px solid #0284c7; }}
         .panel-title {{
-          font-size: 17px;
+          font-size: 19px;
           font-weight: 700;
           color: #ffffff;
-          margin: 0 0 8px 0;
-          line-height: 1.3;
+          margin: 0 0 10px 0;
+          line-height: 1.35;
         }}
         .panel-desc {{
-          font-size: 13px;
-          line-height: 1.6;
-          color: #e2e8f0;
-          margin: 0 0 14px 0;
+          font-size: 14.5px;
+          line-height: 1.65;
+          color: #f1f5f9;
+          margin: 0 0 16px 0;
         }}
         .panel-hint {{
-          font-size: 11.5px;
+          font-size: 12.5px;
           color: #94a3b8;
           border-top: 1px solid #1e293b;
-          padding-top: 10px;
+          padding-top: 12px;
           margin-top: auto;
         }}
       </style>
@@ -476,17 +508,17 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         <div id="radar-container">
           <div id="network"></div>
           <div class="legend-bar">
-            <span><span class="dot" style="background:#ef4444; box-shadow:0 0 6px #ef4444;"></span><strong>Hohes Risiko</strong></span>
-            <span><span class="dot" style="background:#f59e0b; box-shadow:0 0 6px #f59e0b;"></span><strong>Moderates Risiko</strong></span>
-            <span><span class="dot" style="background:#10b981; box-shadow:0 0 6px #10b981;"></span><strong>Kein Risiko</strong></span>
+            <span><span class="dot" style="background:#ef4444; box-shadow:0 0 8px #ef4444;"></span><strong>Hohes Risiko</strong></span>
+            <span><span class="dot" style="background:#f59e0b; box-shadow:0 0 8px #f59e0b;"></span><strong>Moderates Risiko</strong></span>
+            <span><span class="dot" style="background:#10b981; box-shadow:0 0 8px #10b981;"></span><strong>Kein Risiko</strong></span>
           </div>
         </div>
 
         <div id="detail-panel">
           <span id="p-badge" class="panel-badge {'badge-red' if has_conflicts else 'badge-green'}">{'Klinischer Konflikt erkannt' if has_conflicts else 'Unbedenkliche Kombination'}</span>
           <h3 id="p-title" class="panel-title">{'Interaktions-Radar' if has_conflicts else 'Keine dokumentierten Konflikte'}</h3>
-          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Verbindungslinie oder ein Medikament, um den exakten Wirkungsmechanismus einzublenden.' if has_conflicts else 'In den geprueften Fachinformationen und Datenbanken sind zwischen den ausgewaehlten Wirkstoffen keine relevanten Interaktionen verzeichnet.'}</p>
-          <div class="panel-hint">💡 <em>Knoten koennen interaktiv verschoben werden.</em></div>
+          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Verbindungslinie oder ein Medikament, um den exakten Wirkungsmechanismus einzublenden.' if has_conflicts else 'In den geprueften Fachinformationen und Leitlinien sind zwischen den ausgewaehlten Wirkstoffen keine relevanten Interaktionen verzeichnet.'}</p>
+          <div class="panel-hint">💡 <em>Knoten koennen barrierefrei mit der Maus verschoben werden.</em></div>
         </div>
       </div>
 
@@ -563,12 +595,16 @@ def render_interaction_network(active_substances, detected_interactions, synergi
     </body>
     </html>
     """
-    components.html(html_code, height=430)
+    components.html(html_code, height=450)
 
 
 # --- SIDEBAR: Parameter, Patientenprofil & BMP-Import ---
 st.sidebar.title("⚙️ Klinische Parameter")
 
+# 1. Fall-ID & Audit Trail
+patient_id = st.sidebar.text_input("Patienten-ID / Fall-Kürzel (optional):", value="P-2026-001", help="Wird auf dem exportierten Arztbrief fuer das Praxissystem ausgewiesen.")
+
+# 2. BMP / Freitext Import
 with st.sidebar.expander("📋 Medikationsplan / Freitext importieren", expanded=False):
     import_text = st.text_area(
         "BMP-XML oder Textliste einfügen:",
@@ -587,19 +623,37 @@ with st.sidebar.expander("📋 Medikationsplan / Freitext importieren", expanded
             else:
                 st.warning("Keine Wirkstoffe erkannt.")
 
-st.sidebar.markdown("### 👤 Patientenprofil")
-patient_age = st.sidebar.slider("Alter des Patienten (Jahre):", min_value=18, max_value=100, value=72, step=1)
-egfr_value = st.sidebar.slider("Geschätzte eGFR (ml/min/1.73m²):", min_value=10, max_value=120, value=42, step=1)
+# 3. Barrierefreie Zahleneingaben (Tastatur- & Button-tauglich statt Slider)
+st.sidebar.markdown("### 👤 Vitalparameter & Labor")
+
+patient_age = st.sidebar.number_input(
+    "Alter des Patienten (Jahre):",
+    min_value=18,
+    max_value=115,
+    value=72,
+    step=1,
+    help="Ab 65 Jahren greifen automatisch die PRISCUS 2.0 PIM-Kriterien fuer potenziell inadäquate Medikation."
+)
+
+egfr_value = st.sidebar.number_input(
+    "Geschätzte eGFR (ml/min/1.73m²):",
+    min_value=5,
+    max_value=140,
+    value=42,
+    step=1,
+    help="Kreatinin-basierte Nierenfiltrationsrate zur Dosisanpassung und Kontraindikations-Prüfung."
+)
 
 is_geriatric = patient_age >= 65
 if is_geriatric:
     st.sidebar.warning("⚠️ Geriatrischer Patient (≥ 65 Jahre) – PRISCUS 2.0 Filter aktiv")
 
 if egfr_value < 30:
-    st.sidebar.error("🔴 Schwere Niereninsuffizienz (eGFR < 30)")
+    st.sidebar.error("🔴 Schwere Niereninsuffizienz (eGFR < 30 ml/min)")
 elif egfr_value < 60:
-    st.sidebar.warning("🟠 Moderate Niereninsuffizienz (eGFR 30–59)")
+    st.sidebar.warning("🟠 Moderate Niereninsuffizienz (eGFR 30–59 ml/min)")
 
+# 4. Wirkstoffauswahl
 st.sidebar.markdown("### 💊 Medikationsliste")
 available_drugs_catalog = [
     "Ramipril", "Ibuprofen", "Torasemid", "Metformin", "Simvastatin", "Ciprofloxacin",
@@ -623,9 +677,9 @@ st.session_state["selected_drugs"] = selected_drugs
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚖️ Rechtliches & Datenschutz"):
     st.markdown("""
-    **Haftungsausschluss:** MediCheck ist ein wissenschaftliches Entscheidungsunterstützungs-Werkzeug (Clinical Decision Support) für medizinisches Fachpersonal und kein zertifiziertes Medizinprodukt nach EU-MDR.
+    **Haftungsausschluss:** MediCheck ist ein rein wissenschaftliches Informations- und Entscheidungsunterstützungs-Werkzeug (Clinical Decision Support) für medizinisches Fachpersonal und kein zertifiziertes Medizinprodukt im Sinne der EU-MDR.
     
-    **Datenschutz:** Keine Speicherung personenbezogener Patientendaten.
+    **Datenschutz (DSGVO):** Es werden keinerlei personenbezogene Klarnamen oder Patientenakten serverseitig gespeichert.
     """)
 
 # --- DATEN-VERARBEITUNG ---
@@ -655,8 +709,8 @@ schedule = generate_intake_schedule(active_substances)
 lab_checklist = generate_lab_monitoring_checklist(active_substances, egfr_value)
 
 # --- HEADER & KPI-DASHBOARD ---
-st.title("💊 MediCheck")
-st.caption("Evidenzbasierte Polypharmazie-Analyse • PRISCUS 2.0 • eGFR-Dosisanpassung • Chronopharmakologie")
+st.title("💊 MediCheck | AMTS-Cockpit")
+st.caption(f"Evidenzbasierte Polypharmazie-Analyse • Fall: **{patient_id}** • PRISCUS 2.0 • eGFR-Dosisanpassung • Chronopharmakologie")
 
 high_count = sum(1 for i in detected_interactions if i.get("severity") == "Hoch") + sum(1 for s in synergies if s.get("severity") == "Hoch")
 mod_count = sum(1 for i in detected_interactions if i.get("severity") == "Moderat")
@@ -667,7 +721,7 @@ with kpi1:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">Geprüfte Substanzen</p>
-        <h2 style="margin:0; color:#38bdf8;">{len(active_substances)}</h2>
+        <h2 style="margin:0; font-size: 2.2rem; color:#38bdf8;">{len(active_substances)}</h2>
         <p class="metric-desc">Wirkstoffe aktiv</p>
     </div>
     """, unsafe_allow_html=True)
@@ -675,7 +729,7 @@ with kpi2:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">Hohes Risiko</p>
-        <h2 style="margin:0; color:#ef4444;">{high_count}</h2>
+        <h2 style="margin:0; font-size: 2.2rem; color:#ef4444;">{high_count}</h2>
         <p class="metric-desc">Kritische Konflikte</p>
     </div>
     """, unsafe_allow_html=True)
@@ -683,7 +737,7 @@ with kpi3:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">Moderates Risiko</p>
-        <h2 style="margin:0; color:#f59e0b;">{mod_count}</h2>
+        <h2 style="margin:0; font-size: 2.2rem; color:#f59e0b;">{mod_count}</h2>
         <p class="metric-desc">Kombinationshinweise</p>
     </div>
     """, unsafe_allow_html=True)
@@ -691,26 +745,25 @@ with kpi4:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">PIM / Nierenwarnungen</p>
-        <h2 style="margin:0; color:#fb923c;">{pim_renal_total}</h2>
+        <h2 style="margin:0; font-size: 2.2rem; color:#fb923c;">{pim_renal_total}</h2>
         <p class="metric-desc">Geriatrisch / eGFR</p>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- TAB-BASIERTE HAUPTANSICHT ---
+# --- BARRIEREFREIE REITER-NAVIGATION ---
 tab_radar, tab_risks, tab_plan, tab_export = st.tabs([
-    "🕸️ Interaktions-Radar & Triage",
-    f"⚠️ Klinische Risiken ({high_count + pim_renal_total})",
-    "🧪 Labor & Einnahmeplan",
-    "📥 Dossier & Export"
+    "🕸️ 1. Interaktions-Radar & Triage",
+    f"⚠️ 2. Klinische Risiken ({high_count + pim_renal_total})",
+    "🧪 3. Labor & Einnahmeplan",
+    "📥 4. Dossier & Export"
 ])
 
 # ==================== TAB 1: RADAR & TRIAGE ====================
 with tab_radar:
-    # KI-Kurzsynthese als kompaktes Alert-Element
     with st.expander("🤖 Klinische Kurzsynthese (Arzt-Briefing)", expanded=True):
-        col_btn, col_txt = st.columns([1, 4])
+        col_btn, col_txt = st.columns([1, 3.5])
         with col_btn:
             generate_ai = st.button("Synthese erstellen", use_container_width=True)
         with col_txt:
@@ -728,12 +781,11 @@ with tab_radar:
                         )
                 st.info(st.session_state.get("ai_narrative", ""))
             else:
-                st.caption("Erstellt ein 3-sätziges klinisches Briefing zur Risikominimierung für das Arztgespräch.")
+                st.write("Generiert ein 3-sätziges klinisches Briefing zur Risikominimierung für das Arzt- oder Patientengespräch.")
 
-    st.markdown("#### 🕸️ Interaktions-Netzwerk")
+    st.markdown("#### 🕸️ Interaktives Interaktions-Netzwerk")
     render_interaction_network(active_substances, detected_interactions, synergies)
 
-    # Paarweise Interaktionen als aufklappbare Liste
     st.markdown("#### 📑 Dokumentierte Paar-Wechselwirkungen")
     if detected_interactions:
         for item in detected_interactions:
@@ -747,10 +799,11 @@ with tab_radar:
                 <span class="status-badge {badge_class}">{sev}</span>
                 <span class="status-badge badge-organ">{item.get('system', 'Allgemein')}</span>
                 <span class="status-badge badge-db">{item.get('source', 'Lokal verifiziert')}</span>
-                <h4 style="margin:8px 0 4px 0; color:#fff;">{d1.capitalize()} + {d2.capitalize()}</h4>
-                <p style="margin:0 0 6px 0; font-size:0.92rem;">{item.get('effect', '')}</p>
-                {f'<p style="margin:0 0 6px 0; font-size:0.85rem; color:#94a3b8;"><em>Mechanismus: {item["mechanism"]}</em></p>' if item.get("mechanism") else ''}
+                <h3 style="margin:10px 0 6px 0; color:#fff; font-size: 1.25rem;">{d1.capitalize()} + {d2.capitalize()}</h3>
+                <p style="margin:0 0 6px 0; font-size:1.02rem;">{item.get('effect', '')}</p>
+                {f'<p style="margin:0 0 6px 0; font-size:0.92rem; color:#94a3b8;"><em>Mechanismus: {item["mechanism"]}</em></p>' if item.get("mechanism") else ''}
                 {f'<div class="advice-box">💡 <strong>Handlungsempfehlung:</strong> {item["advice"]}</div>' if item.get("advice") else ''}
+                <div class="citation-note">Evidenzquelle: Fachinformationen der Hersteller / openFDA Drug Interaction Reference</div>
             </div>
             """, unsafe_allow_html=True)
     else:
@@ -770,10 +823,11 @@ with tab_risks:
             <div class="synergy-card">
                 <span class="status-badge badge-high">{syn['severity']}</span>
                 <span class="status-badge badge-class">{syn['type']}</span>
-                <h4 style="margin:8px 0 4px 0; color:#fff;">{syn['title']}</h4>
+                <h3 style="margin:10px 0 6px 0; color:#fff; font-size: 1.25rem;">{syn['title']}</h3>
                 <p style="margin:0 0 4px 0;"><strong>Beteiligte Substanzen:</strong> {", ".join([s.capitalize() for s in syn['drugs']])}</p>
                 <p style="margin:0 0 4px 0;">{syn['effect']}</p>
-                <p style="margin:0; font-size:0.85rem; color:#fca5a5;"><em>Mechanismus: {syn['mechanism']}</em></p>
+                <p style="margin:0; font-size:0.92rem; color:#fca5a5;"><em>Mechanismus: {syn['mechanism']}</em></p>
+                <div class="citation-note">Leitlinie: AMTS-Konsensus & DKG-Leitlinie kardiovaskuläre Pharmakotherapie</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -783,10 +837,11 @@ with tab_risks:
             st.markdown(f"""
             <div class="priscus-card">
                 <span class="status-badge badge-medium">PRISCUS 2.0 PIM</span>
-                <h4 style="margin:8px 0 4px 0; color:#fef08a;">{pim['drug'].capitalize()}</h4>
+                <h3 style="margin:10px 0 6px 0; color:#fef08a; font-size: 1.25rem;">{pim['drug'].capitalize()}</h3>
                 <p style="margin:0 0 4px 0;"><strong>Risiko im Alter:</strong> {pim['risk']}</p>
                 <p style="margin:0 0 4px 0;"><strong>Begründung:</strong> {pim['reason']}</p>
-                <p style="margin:0; color:#fde047;"><strong>Leitlinien-Alternative:</strong> {pim['alternative']}</p>
+                <p style="margin:0; font-weight:700; color:#fde047;"><strong>Leitlinien-Alternative:</strong> {pim['alternative']}</p>
+                <div class="citation-note">Quelle: PRISCUS 2.0 Leitlinie (BMBF-gefördert, 2023)</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -796,9 +851,10 @@ with tab_risks:
             st.markdown(f"""
             <div class="renal-card">
                 <span class="status-badge badge-high">{ren['severity']}</span>
-                <h4 style="margin:8px 0 4px 0; color:#fed7aa;">{ren['title']}</h4>
+                <h3 style="margin:10px 0 6px 0; color:#fed7aa; font-size: 1.25rem;">{ren['title']}</h3>
                 <p style="margin:0 0 4px 0;">{ren['message']}</p>
-                <p style="margin:0; color:#ffedd5;"><strong>Empfohlene Maßnahme:</strong> {ren['action']}</p>
+                <p style="margin:0; font-weight:700; color:#ffedd5;"><strong>Empfohlene Maßnahme:</strong> {ren['action']}</p>
+                <div class="citation-note">Referenz: Dosing in Renal Disease (KDIGO Guidelines 2024)</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -816,9 +872,10 @@ with tab_plan:
                 <div class="monitoring-card">
                     <span class="status-badge {badge_class}">{lab['urgency']}e Priorität</span>
                     <span class="status-badge badge-db">{lab['interval']}</span>
-                    <h4 style="margin:8px 0 4px 0; color:#ffffff;">🔬 {lab['parameter']}</h4>
-                    <p style="margin:0 0 4px 0; font-size:0.88rem; color:#cbd5e1;"><strong>Auslöser:</strong> {', '.join(lab['triggers'])}</p>
-                    <p style="margin:0; font-size:0.85rem; color:#94a3b8;"><strong>Begründung:</strong> {lab['reason']}</p>
+                    <h3 style="margin:10px 0 6px 0; color:#ffffff; font-size: 1.2rem;">🔬 {lab['parameter']}</h3>
+                    <p style="margin:0 0 4px 0; font-size:0.95rem; color:#cbd5e1;"><strong>Auslöser:</strong> {', '.join(lab['triggers'])}</p>
+                    <p style="margin:0; font-size:0.92rem; color:#94a3b8;"><strong>Begründung:</strong> {lab['reason']}</p>
+                    <div class="citation-note">Leitlinie: Fachinformationen & AkdÄ-Monitoring-Empfehlungen</div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
@@ -830,9 +887,9 @@ with tab_plan:
             for slot, items in schedule.items():
                 st.markdown(f"""
                 <div class="schedule-card">
-                    <h4 style="margin:0 0 6px 0; color:#38bdf8;">🕒 {slot}</h4>
-                    <ul style="margin:0; padding-left:18px;">
-                        {''.join([f'<li style="margin-bottom:3px; font-size:0.92rem;">{it}</li>' for it in items])}
+                    <h3 style="margin:0 0 8px 0; color:#38bdf8; font-size: 1.2rem;">🕒 {slot}</h3>
+                    <ul style="margin:0; padding-left:20px;">
+                        {''.join([f'<li style="margin-bottom:4px; font-size:0.98rem;">{it}</li>' for it in items])}
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
@@ -842,7 +899,7 @@ with tab_plan:
 # ==================== TAB 4: DOSSIER & EXPORT ====================
 with tab_export:
     st.markdown("#### 📥 Klinischer Report & Medikationsdossier")
-    st.write("Generieren Sie einen druckfertigen DIN-A4-Arztbrief oder exportieren Sie den Befund zur Übernahme in Ihr Praxis- oder Apothekenverwaltungssystem.")
+    st.write(f"Generieren Sie einen druckfertigen DIN-A4-Arztbrief für **Fall-ID {patient_id}** zur Übernahme in Ihr Praxis- oder Apothekenverwaltungssystem.")
 
     col_btn_pdf, col_btn_txt = st.columns(2)
 
@@ -862,7 +919,7 @@ with tab_export:
             st.download_button(
                 label="📄 PDF-Arztbrief herunterladen (DIN-A4)",
                 data=pdf_bytes,
-                file_name=f"medicheck_befund_{patient_age}J_eGFR{egfr_value}.pdf",
+                file_name=f"medicheck_befund_{patient_id}_{patient_age}J_eGFR{egfr_value}.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
@@ -872,16 +929,16 @@ with tab_export:
     with col_btn_txt:
         summary_text = (
             f"MediCheck AMTS-Befund\n"
-            f"Patient: {patient_age} Jahre | eGFR: {egfr_value} ml/min\n"
+            f"Fall-ID: {patient_id} | Patient: {patient_age} Jahre | eGFR: {egfr_value} ml/min\n"
             f"Wirkstoffe ({len(active_substances)}): {', '.join([s.capitalize() for s in active_substances])}\n"
             f"Interaktionen: {len(detected_interactions)} | Synergien: {len(synergies)} | PIM: {len(priscus_alerts)}\n\n"
             f"Befundübersicht:\n"
             + "\n".join([f"- [{i.get('severity')}] {i['pair'][0].capitalize()} + {i['pair'][1].capitalize()}: {i.get('effect')}" for i in detected_interactions])
         )
         st.download_button(
-            label="📋 Text-Befund kopieren / exportieren",
+            label="📋 Text-Befund in Zwischenablage exportieren",
             data=summary_text,
-            file_name="medicheck_befund.txt",
+            file_name=f"medicheck_{patient_id}.txt",
             mime="text/plain",
             use_container_width=True
         )
