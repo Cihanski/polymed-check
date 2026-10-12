@@ -235,7 +235,7 @@ def check_substance_pair(drug_a, drug_b):
 
 
 def render_interaction_network(active_substances, detected_interactions, synergies):
-    """Erzeugt ein standfest zentriertes 2-Spalten Split-Panel im Dark-Design."""
+    """Erzeugt ein standfest zentriertes 2-Spalten Split-Panel im Dark-Design inklusive Synergie-Kanten."""
     nodes = []
     edges = []
 
@@ -271,6 +271,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         elif "simvastatin" in d_low: sub_class = "Statin"
         elif "metformin" in d_low: sub_class = "Biguanid"
         elif "ciprofloxacin" in d_low: sub_class = "Antibiotikum"
+        elif "amiodaron" in d_low: sub_class = "Antiarrhythmikum"
         elif pharm and pharm.get("drug_class") and "WHO-ATC" not in pharm.get("drug_class"):
             sub_class = pharm["drug_class"][:14]
 
@@ -310,11 +311,15 @@ def render_interaction_network(active_substances, detected_interactions, synergi
 
     edge_details_map = {}
     first_edge_id = None
-    for idx, item in enumerate(detected_interactions):
+    edge_idx = 0
+
+    # 1. Direkte Paar-Wechselwirkungen
+    for item in detected_interactions:
         d1, d2 = item["pair"]
         sev = item.get("severity", "Moderat")
         is_high = sev == "Hoch"
-        edge_id = f"edge_{idx}"
+        edge_id = f"edge_{edge_idx}"
+        edge_idx += 1
         if first_edge_id is None:
             first_edge_id = edge_id
 
@@ -339,11 +344,47 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             "smooth": {"type": "curvedCW", "roundness": 0.15}
         })
 
+    # 2. Multidrug-Synergien (z. B. QT-Verlaengerung zwischen Amiodaron & Ciprofloxacin)
+    drawn_pairs = set(tuple(sorted([item["pair"][0], item["pair"][1]])) for item in detected_interactions)
+    for syn in synergies:
+        syn_drugs = syn.get("drugs", [])
+        if len(syn_drugs) >= 2:
+            for s1, s2 in itertools.combinations(syn_drugs, 2):
+                pair_key = tuple(sorted([s1, s2]))
+                if pair_key not in drawn_pairs:
+                    drawn_pairs.add(pair_key)
+                    is_high = syn.get("severity") == "Hoch"
+                    edge_id = f"edge_{edge_idx}"
+                    edge_idx += 1
+                    if first_edge_id is None:
+                        first_edge_id = edge_id
+
+                    edge_details_map[edge_id] = {
+                        "pair": f"{s1.capitalize()} + {s2.capitalize()}",
+                        "severity": syn.get("severity", "Hoch"),
+                        "system": syn.get("type", "Synergie"),
+                        "effect": syn.get("title", "") + ": " + syn.get("effect", ""),
+                        "mechanism": syn.get("mechanism", "")
+                    }
+
+                    edges.append({
+                        "id": edge_id,
+                        "from": s1,
+                        "to": s2,
+                        "color": {
+                            "color": "#ef4444" if is_high else "#f59e0b",
+                            "highlight": "#38bdf8"
+                        },
+                        "width": 3.5 if is_high else 2.5,
+                        "dashes": [4, 4] if not is_high else False,
+                        "smooth": {"type": "curvedCW", "roundness": 0.2}
+                    })
+
     nodes_json = json.dumps(nodes)
     edges_json = json.dumps(edges)
     edge_details_json = json.dumps(edge_details_map)
     default_edge_id = json.dumps(first_edge_id)
-    has_conflicts = len(detected_interactions) > 0
+    has_conflicts = len(edges) > 0
 
     html_code = f"""
     <!DOCTYPE html>
@@ -464,7 +505,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         </div>
 
         <div id="detail-panel">
-          <span id="p-badge" class="panel-badge {'badge-blue' if has_conflicts else 'badge-green'}">{'Klinische Inspektion' if has_conflicts else 'Unbedenkliche Kombination'}</span>
+          <span id="p-badge" class="panel-badge {'badge-red' if has_conflicts else 'badge-green'}">{'Klinischer Konflikt erkannt' if has_conflicts else 'Unbedenkliche Kombination'}</span>
           <h3 id="p-title" class="panel-title">{'Interaktions-Radar' if has_conflicts else 'Keine dokumentierten Konflikte'}</h3>
           <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.' if has_conflicts else 'In den geprüften Fachinformationen und Datenbanken sind zwischen den ausgewählten Wirkstoffen keine relevanten Interaktionen verzeichnet. Die Kombination gilt als verträglich.'}</p>
           <div class="panel-hint">💡 <em>Knoten sind standfest zentriert und können interaktiv verschoben werden.</em></div>
@@ -512,7 +553,6 @@ def render_interaction_network(active_substances, detected_interactions, synergi
 
         var network = new vis.Network(container, data, options);
 
-        // Standfest-Logik: Physik nach Stabilisierung anhalten & zentrieren
         network.once('stabilizationIterationsDone', function() {{
           network.setOptions({{ physics: false }});
           network.fit({{

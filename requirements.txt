@@ -1,4 +1,4 @@
 streamlit
 requests
 fpdf2
-pytest
+google-genai
