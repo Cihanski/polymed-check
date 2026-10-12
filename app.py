@@ -1,14 +1,13 @@
 import os
 import json
 import itertools
-from ai_pipeline import generate_clinical_summary
 import streamlit as st
 import streamlit.components.v1 as components
-from fpdf import FPDF
 
-from pdf_generator import generate_full_clinical_pdf
 from drug_translator import translate_to_inn
 from bmp_parser import parse_medication_text
+from pdf_generator import generate_full_clinical_pdf
+from ai_pipeline import generate_clinical_summary
 from cache_manager import (
     fetch_exact_cache,
     check_phyto_and_cation_rules,
@@ -33,26 +32,26 @@ st.set_page_config(
 # --- CSS / Dark Mode Theme Overrides ---
 st.markdown("""
 <style>
-    /* Globales Dark Theme */
     .metric-card {
         background-color: #0f172a !important;
         border-radius: 12px;
-        padding: 20px;
+        padding: 18px;
         border: 1px solid #1e293b;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
-        margin-bottom: 20px;
         color: #f1f5f9 !important;
     }
     .metric-title {
-        margin: 0 0 8px 0; 
+        margin: 0 0 6px 0; 
         color: #94a3b8 !important; 
-        font-size: 0.95rem; 
+        font-size: 0.88rem; 
         font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
     .metric-desc {
-        margin: 8px 0 0 0; 
+        margin: 6px 0 0 0; 
         color: #64748b !important; 
-        font-size: 0.85rem;
+        font-size: 0.82rem;
     }
     .status-badge {
         display: inline-block;
@@ -87,22 +86,12 @@ st.markdown("""
         color: #a5b4fc !important;
         border: 1px solid #4338ca;
     }
-    .badge-phyto {
-        background-color: #052e16 !important;
-        color: #86efac !important;
-        border: 1px solid #15803d;
-    }
-    .badge-fda {
-        background-color: #064e3b !important;
-        color: #6ee7b7 !important;
-        border: 1px solid #047857;
-    }
     .interaction-card {
         background-color: #0f172a !important;
         border-left: 5px solid #475569;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 15px;
+        margin-bottom: 14px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         border-top: 1px solid #1e293b;
         border-right: 1px solid #1e293b;
@@ -124,31 +113,13 @@ st.markdown("""
         font-size: 0.90rem;
         color: #a7f3d0 !important;
     }
-    .combo-box {
-        background-color: #0f172a !important;
-        border: 1px solid #334155;
-        border-radius: 6px;
-        padding: 10px 14px;
-        margin-bottom: 16px;
-        font-size: 0.90rem;
-        color: #cbd5e1 !important;
-    }
-    .profile-card {
-        background-color: #0f172a !important;
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        padding: 14px 18px;
-        margin-bottom: 12px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        color: #f1f5f9 !important;
-    }
     .priscus-card {
         background-color: #422006 !important;
         border: 1px solid #854d0e;
         border-left: 6px solid #eab308;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
         color: #fef08a !important;
     }
     .renal-card {
@@ -157,7 +128,7 @@ st.markdown("""
         border-left: 6px solid #f97316;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
         color: #fed7aa !important;
     }
     .schedule-card {
@@ -166,7 +137,7 @@ st.markdown("""
         border-left: 6px solid #3b82f6;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
         color: #f1f5f9 !important;
     }
     .monitoring-card {
@@ -175,7 +146,7 @@ st.markdown("""
         border-left: 6px solid #38bdf8;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 20px;
+        margin-bottom: 14px;
         color: #e0f2fe !important;
     }
     .synergy-card {
@@ -184,26 +155,41 @@ st.markdown("""
         border-left: 6px solid #f43f5e;
         border-radius: 8px;
         padding: 16px 20px;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
         color: #ffe4e6 !important;
     }
     .disclaimer-banner {
         background-color: #0f172a !important;
         border-left: 4px solid #38bdf8;
         border-radius: 6px;
-        padding: 12px 16px;
-        margin-bottom: 20px;
+        padding: 10px 16px;
+        margin-bottom: 16px;
         color: #bae6fd !important;
-        font-size: 0.9rem;
+        font-size: 0.88rem;
     }
     .disclaimer-box {
         background-color: #0b0f19 !important;
         border: 1px solid #1e293b;
         border-radius: 8px;
-        padding: 16px;
-        font-size: 0.88rem;
+        padding: 14px;
+        font-size: 0.85rem;
         color: #64748b !important;
-        margin-top: 30px;
+        margin-top: 25px;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 8px 8px 0 0;
+        padding: 10px 18px;
+        color: #94a3b8;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1e293b !important;
+        color: #38bdf8 !important;
+        border-bottom: 2px solid #38bdf8 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -211,31 +197,23 @@ st.markdown("""
 
 def check_substance_pair(drug_a, drug_b):
     """Fuehrt alle Pruefstufen fuer ein Wirkstoffpaar aus."""
-    # 1. SQLite Exakt
     res = fetch_exact_cache(drug_a, drug_b)
     if res:
         return res
-
-    # 2. Kation / Phyto
     res = check_phyto_and_cation_rules(drug_a, drug_b)
     if res:
         return res
-
-    # 3. ATC-Klassenregeln
     res = check_class_level_rules(drug_a, drug_b)
     if res:
         return res
-
-    # 4. openFDA Fallback
     res = fetch_fda_interaction(drug_a, drug_b)
     if res:
         return res
-
     return None
 
 
 def render_interaction_network(active_substances, detected_interactions, synergies):
-    """Erzeugt ein standfest zentriertes 2-Spalten Split-Panel im Dark-Design inklusive Synergie-Kanten."""
+    """Erzeugt das standfest zentrierte 2-Spalten Split-Panel im Dark-Design."""
     nodes = []
     edges = []
 
@@ -344,7 +322,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             "smooth": {"type": "curvedCW", "roundness": 0.15}
         })
 
-    # 2. Multidrug-Synergien (z. B. QT-Verlaengerung zwischen Amiodaron & Ciprofloxacin)
+    # 2. Synergie-Kanten
     drawn_pairs = set(tuple(sorted([item["pair"][0], item["pair"][1]])) for item in detected_interactions)
     for syn in synergies:
         syn_drugs = syn.get("drugs", [])
@@ -404,7 +382,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           gap: 16px;
           width: 100%;
-          min-height: 420px;
+          min-height: 400px;
         }}
         #radar-container {{
           flex: 1.5;
@@ -419,7 +397,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         }}
         #network {{
           width: 100%;
-          height: 365px;
+          height: 350px;
           background-color: #090d16;
           background-image: 
             radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.35) 0%, rgba(9, 13, 22, 1) 100%),
@@ -431,16 +409,16 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           display: flex;
           justify-content: space-around;
           align-items: center;
-          height: 45px;
+          height: 42px;
           padding: 0 16px;
           background-color: #030712;
           border-top: 1px solid #1e293b;
-          font-size: 12px;
+          font-size: 11.5px;
           color: #cbd5e1;
         }}
         .dot {{
-          width: 10px;
-          height: 10px;
+          width: 9px;
+          height: 9px;
           border-radius: 50%;
           display: inline-block;
           margin-right: 6px;
@@ -451,11 +429,11 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           border-radius: 12px;
           background: #0f172a;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-          padding: 22px 24px;
+          padding: 20px 22px;
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
-          min-height: 420px;
+          min-height: 400px;
           overflow-y: auto;
         }}
         .panel-badge {{
@@ -465,30 +443,30 @@ def render_interaction_network(active_substances, detected_interactions, synergi
           padding: 4px 12px;
           border-radius: 9999px;
           text-transform: uppercase;
-          margin-bottom: 12px;
+          margin-bottom: 10px;
         }}
         .badge-red {{ background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }}
         .badge-yellow {{ background: #78350f; color: #fef3c7; border: 1px solid #f59e0b; }}
         .badge-green {{ background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; }}
         .badge-blue {{ background: #0c4a6e; color: #bae6fd; border: 1px solid #0284c7; }}
         .panel-title {{
-          font-size: 18px;
+          font-size: 17px;
           font-weight: 700;
           color: #ffffff;
-          margin: 0 0 10px 0;
+          margin: 0 0 8px 0;
           line-height: 1.3;
         }}
         .panel-desc {{
-          font-size: 13.5px;
+          font-size: 13px;
           line-height: 1.6;
           color: #e2e8f0;
-          margin: 0 0 16px 0;
+          margin: 0 0 14px 0;
         }}
         .panel-hint {{
-          font-size: 12px;
+          font-size: 11.5px;
           color: #94a3b8;
           border-top: 1px solid #1e293b;
-          padding-top: 12px;
+          padding-top: 10px;
           margin-top: auto;
         }}
       </style>
@@ -507,8 +485,8 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         <div id="detail-panel">
           <span id="p-badge" class="panel-badge {'badge-red' if has_conflicts else 'badge-green'}">{'Klinischer Konflikt erkannt' if has_conflicts else 'Unbedenkliche Kombination'}</span>
           <h3 id="p-title" class="panel-title">{'Interaktions-Radar' if has_conflicts else 'Keine dokumentierten Konflikte'}</h3>
-          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Linie oder ein Medikament, um den genauen Wirkungsmechanismus und Organ-Konflikt einzublenden.' if has_conflicts else 'In den geprüften Fachinformationen und Datenbanken sind zwischen den ausgewählten Wirkstoffen keine relevanten Interaktionen verzeichnet. Die Kombination gilt als verträglich.'}</p>
-          <div class="panel-hint">💡 <em>Knoten sind standfest zentriert und können interaktiv verschoben werden.</em></div>
+          <p id="p-desc" class="panel-desc">{'Klicken Sie links auf eine Verbindungslinie oder ein Medikament, um den exakten Wirkungsmechanismus einzublenden.' if has_conflicts else 'In den geprueften Fachinformationen und Datenbanken sind zwischen den ausgewaehlten Wirkstoffen keine relevanten Interaktionen verzeichnet.'}</p>
+          <div class="panel-hint">💡 <em>Knoten koennen interaktiv verschoben werden.</em></div>
         </div>
       </div>
 
@@ -525,15 +503,10 @@ def render_interaction_network(active_substances, detected_interactions, synergi
         var pDesc = document.getElementById('p-desc');
 
         var data = {{ nodes: nodes, edges: edges }};
-        
         var options = {{
           physics: {{
             enabled: true,
-            stabilization: {{
-              enabled: true,
-              iterations: 150,
-              updateInterval: 25
-            }},
+            stabilization: {{ iterations: 150, updateInterval: 25 }},
             barnesHut: {{
               gravitationalConstant: -3000,
               centralGravity: 0.8,
@@ -555,13 +528,7 @@ def render_interaction_network(active_substances, detected_interactions, synergi
 
         network.once('stabilizationIterationsDone', function() {{
           network.setOptions({{ physics: false }});
-          network.fit({{
-            animation: {{
-              duration: 400,
-              easingFunction: 'easeInOutQuad'
-            }}
-          }});
-          
+          network.fit({{ animation: {{ duration: 400, easingFunction: 'easeInOutQuad' }} }});
           if (hasConflicts && defaultEdge && edgeMap[defaultEdge]) {{
             showEdgeDetails(edgeMap[defaultEdge]);
           }}
@@ -589,25 +556,24 @@ def render_interaction_network(active_substances, detected_interactions, synergi
             pBadge.className = "panel-badge badge-blue";
             pBadge.innerText = "Wirkstoff-Fokus";
             pTitle.innerText = nodeId.toUpperCase();
-            pDesc.innerText = "Dieser Wirkstoff ist im Netzwerk aktiv. Klicken Sie auf eine Verbindungslinie für detaillierte Wechselwirkungen.";
+            pDesc.innerText = "Dieser Wirkstoff ist im Profil aktiv. Klicken Sie auf eine Verbindungslinie fuer detaillierte Wechselwirkungen.";
           }}
         }});
       </script>
     </body>
     </html>
     """
-    components.html(html_code, height=450)
+    components.html(html_code, height=430)
 
 
-# --- SIDEBAR: Filter, Patientenprofil & BMP-Import ---
+# --- SIDEBAR: Parameter, Patientenprofil & BMP-Import ---
 st.sidebar.title("⚙️ Klinische Parameter")
 
-# 1. BMP / Freitext Import
 with st.sidebar.expander("📋 Medikationsplan / Freitext importieren", expanded=False):
     import_text = st.text_area(
         "BMP-XML oder Textliste einfügen:",
         placeholder="Z. B.:\nRamipril 5mg 1-0-0\nMetformin 1000mg 1-0-1\nSimvastatin 40mg abends",
-        height=100
+        height=95
     )
     if st.button("Substanzen übernehmen", use_container_width=True):
         if import_text:
@@ -619,23 +585,21 @@ with st.sidebar.expander("📋 Medikationsplan / Freitext importieren", expanded
                 st.success(f"{len(parsed_drugs)} Substanz(en) erkannt!")
                 st.rerun()
             else:
-                st.warning("Keine Wirkstoffe im eingegebenen Text erkannt.")
+                st.warning("Keine Wirkstoffe erkannt.")
 
-# 2. Patientenprofil
 st.sidebar.markdown("### 👤 Patientenprofil")
 patient_age = st.sidebar.slider("Alter des Patienten (Jahre):", min_value=18, max_value=100, value=72, step=1)
 egfr_value = st.sidebar.slider("Geschätzte eGFR (ml/min/1.73m²):", min_value=10, max_value=120, value=42, step=1)
 
 is_geriatric = patient_age >= 65
 if is_geriatric:
-    st.sidebar.warning("⚠️ Geriatrischer Patient (≥ 65 Jahre) – PRISCUS 2.0 PIM-Filter aktiv")
+    st.sidebar.warning("⚠️ Geriatrischer Patient (≥ 65 Jahre) – PRISCUS 2.0 Filter aktiv")
 
 if egfr_value < 30:
-    st.sidebar.error("🔴 Schwere Niereninsuffizienz (eGFR < 30 ml/min)")
+    st.sidebar.error("🔴 Schwere Niereninsuffizienz (eGFR < 30)")
 elif egfr_value < 60:
-    st.sidebar.warning("🟠 Moderate Niereninsuffizienz (eGFR 30–59 ml/min)")
+    st.sidebar.warning("🟠 Moderate Niereninsuffizienz (eGFR 30–59)")
 
-# 3. Wirkstoffauswahl
 st.sidebar.markdown("### 💊 Medikationsliste")
 available_drugs_catalog = [
     "Ramipril", "Ibuprofen", "Torasemid", "Metformin", "Simvastatin", "Ciprofloxacin",
@@ -655,17 +619,16 @@ selected_drugs = st.sidebar.multiselect(
 )
 st.session_state["selected_drugs"] = selected_drugs
 
-# --- HAUPTANSICHT ---
-st.title("💊 MediCheck")
-st.caption("Evidenzbasierte Polypharmazie-Analyse • PRISCUS 2.0 • eGFR-Dosisanpassung • Chronopharmakologie")
+# Rechtlicher Footer in der Sidebar
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚖️ Rechtliches & Datenschutz"):
+    st.markdown("""
+    **Haftungsausschluss:** MediCheck ist ein wissenschaftliches Entscheidungsunterstützungs-Werkzeug (Clinical Decision Support) für medizinisches Fachpersonal und kein zertifiziertes Medizinprodukt nach EU-MDR.
+    
+    **Datenschutz:** Keine Speicherung personenbezogener Patientendaten.
+    """)
 
-st.markdown("""
-<div class="disclaimer-banner">
-    🛡️ <strong>Klinischer Leitfaden:</strong> Vollautomatische Triagierung von 1:1-Substanzpaaren, ATC-Klassenkonflikten, PRISCUS 2.0 PIM-Kriterien und pharmakodynamischen Multidrug-Synergien.
-</div>
-""", unsafe_allow_html=True)
-
-# Substanzen normalisieren und Fixkombinationen auflösen
+# --- DATEN-VERARBEITUNG ---
 active_substances = []
 for d in selected_drugs:
     inn = translate_to_inn(d)
@@ -678,7 +641,6 @@ for d in selected_drugs:
 
 active_substances = list(dict.fromkeys(active_substances))
 
-# Interaktionen ermitteln
 detected_interactions = []
 if len(active_substances) >= 2:
     for da, db in itertools.combinations(active_substances, 2):
@@ -686,19 +648,22 @@ if len(active_substances) >= 2:
         if res:
             detected_interactions.append(res)
 
-# Synergien, Priscus, Nierenrisiken & Labor-Monitoring
 synergies = check_multidrug_synergies(active_substances)
 priscus_alerts = check_priscus_pim(active_substances) if is_geriatric else []
 renal_alerts = check_renal_risks(active_substances, egfr_value)
 schedule = generate_intake_schedule(active_substances)
 lab_checklist = generate_lab_monitoring_checklist(active_substances, egfr_value)
 
-# --- KPI-Kacheln ---
-col1, col2, col3, col4 = st.columns(4)
+# --- HEADER & KPI-DASHBOARD ---
+st.title("💊 MediCheck")
+st.caption("Evidenzbasierte Polypharmazie-Analyse • PRISCUS 2.0 • eGFR-Dosisanpassung • Chronopharmakologie")
+
 high_count = sum(1 for i in detected_interactions if i.get("severity") == "Hoch") + sum(1 for s in synergies if s.get("severity") == "Hoch")
 mod_count = sum(1 for i in detected_interactions if i.get("severity") == "Moderat")
+pim_renal_total = len(priscus_alerts) + len(renal_alerts)
 
-with col1:
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+with kpi1:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">Geprüfte Substanzen</p>
@@ -706,8 +671,7 @@ with col1:
         <p class="metric-desc">Wirkstoffe aktiv</p>
     </div>
     """, unsafe_allow_html=True)
-
-with col2:
+with kpi2:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">Hohes Risiko</p>
@@ -715,8 +679,7 @@ with col2:
         <p class="metric-desc">Kritische Konflikte</p>
     </div>
     """, unsafe_allow_html=True)
-
-with col3:
+with kpi3:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">Moderates Risiko</p>
@@ -724,9 +687,7 @@ with col3:
         <p class="metric-desc">Kombinationshinweise</p>
     </div>
     """, unsafe_allow_html=True)
-
-with col4:
-    pim_renal_total = len(priscus_alerts) + len(renal_alerts)
+with kpi4:
     st.markdown(f"""
     <div class="metric-card">
         <p class="metric-title">PIM / Nierenwarnungen</p>
@@ -735,186 +696,198 @@ with col4:
     </div>
     """, unsafe_allow_html=True)
 
-# --- KI-KLINISCHE KURZSYNTHESE ---
-with st.expander("🤖 KI-Klinische Kurzsynthese (Arzt-Briefing)", expanded=True):
-    col_ai_btn, col_ai_txt = st.columns([1, 4])
-    with col_ai_btn:
-        generate_ai = st.button("Synthese erstellen", use_container_width=True)
-    with col_ai_txt:
-        if generate_ai or "ai_narrative" in st.session_state:
-            if generate_ai:
-                with st.spinner("Pharmakologische Gesamtsynthese wird erstellt..."):
-                    st.session_state["ai_narrative"] = generate_clinical_summary(
-                        patient_age=patient_age,
-                        egfr_value=egfr_value,
-                        active_substances=active_substances,
-                        detected_interactions=detected_interactions,
-                        synergies=synergies,
-                        priscus_alerts=priscus_alerts,
-                        renal_alerts=renal_alerts
-                    )
-            st.info(st.session_state.get("ai_narrative", ""))
+st.markdown("<br>", unsafe_allow_html=True)
+
+# --- TAB-BASIERTE HAUPTANSICHT ---
+tab_radar, tab_risks, tab_plan, tab_export = st.tabs([
+    "🕸️ Interaktions-Radar & Triage",
+    f"⚠️ Klinische Risiken ({high_count + pim_renal_total})",
+    "🧪 Labor & Einnahmeplan",
+    "📥 Dossier & Export"
+])
+
+# ==================== TAB 1: RADAR & TRIAGE ====================
+with tab_radar:
+    # KI-Kurzsynthese als kompaktes Alert-Element
+    with st.expander("🤖 Klinische Kurzsynthese (Arzt-Briefing)", expanded=True):
+        col_btn, col_txt = st.columns([1, 4])
+        with col_btn:
+            generate_ai = st.button("Synthese erstellen", use_container_width=True)
+        with col_txt:
+            if generate_ai or "ai_narrative" in st.session_state:
+                if generate_ai:
+                    with st.spinner("Pharmakologische Gesamtsynthese wird erstellt..."):
+                        st.session_state["ai_narrative"] = generate_clinical_summary(
+                            patient_age=patient_age,
+                            egfr_value=egfr_value,
+                            active_substances=active_substances,
+                            detected_interactions=detected_interactions,
+                            synergies=synergies,
+                            priscus_alerts=priscus_alerts,
+                            renal_alerts=renal_alerts
+                        )
+                st.info(st.session_state.get("ai_narrative", ""))
+            else:
+                st.caption("Erstellt ein 3-sätziges klinisches Briefing zur Risikominimierung für das Arztgespräch.")
+
+    st.markdown("#### 🕸️ Interaktions-Netzwerk")
+    render_interaction_network(active_substances, detected_interactions, synergies)
+
+    # Paarweise Interaktionen als aufklappbare Liste
+    st.markdown("#### 📑 Dokumentierte Paar-Wechselwirkungen")
+    if detected_interactions:
+        for item in detected_interactions:
+            d1, d2 = item["pair"]
+            sev = item.get("severity", "Moderat")
+            is_high = sev == "Hoch"
+            card_class = "high" if is_high else "medium"
+            badge_class = "badge-high" if is_high else "badge-medium"
+            st.markdown(f"""
+            <div class="interaction-card {card_class}">
+                <span class="status-badge {badge_class}">{sev}</span>
+                <span class="status-badge badge-organ">{item.get('system', 'Allgemein')}</span>
+                <span class="status-badge badge-db">{item.get('source', 'Lokal verifiziert')}</span>
+                <h4 style="margin:8px 0 4px 0; color:#fff;">{d1.capitalize()} + {d2.capitalize()}</h4>
+                <p style="margin:0 0 6px 0; font-size:0.92rem;">{item.get('effect', '')}</p>
+                {f'<p style="margin:0 0 6px 0; font-size:0.85rem; color:#94a3b8;"><em>Mechanismus: {item["mechanism"]}</em></p>' if item.get("mechanism") else ''}
+                {f'<div class="advice-box">💡 <strong>Handlungsempfehlung:</strong> {item["advice"]}</div>' if item.get("advice") else ''}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.success("Keine paarweisen Wechselwirkungen zwischen den ausgewählten Wirkstoffen dokumentiert.")
+
+# ==================== TAB 2: KLINISCHE RISIKEN ====================
+with tab_risks:
+    has_any_risk = bool(synergies or priscus_alerts or renal_alerts)
+
+    if not has_any_risk:
+        st.success("Keine akuten Multidrug-Synergien, PRISCUS-Kriterien oder Nierenrisiken identifiziert.")
+
+    if synergies:
+        st.markdown("#### ⚡ Multidrug-Synergien (Kombinatorische Risiken)")
+        for syn in synergies:
+            st.markdown(f"""
+            <div class="synergy-card">
+                <span class="status-badge badge-high">{syn['severity']}</span>
+                <span class="status-badge badge-class">{syn['type']}</span>
+                <h4 style="margin:8px 0 4px 0; color:#fff;">{syn['title']}</h4>
+                <p style="margin:0 0 4px 0;"><strong>Beteiligte Substanzen:</strong> {", ".join([s.capitalize() for s in syn['drugs']])}</p>
+                <p style="margin:0 0 4px 0;">{syn['effect']}</p>
+                <p style="margin:0; font-size:0.85rem; color:#fca5a5;"><em>Mechanismus: {syn['mechanism']}</em></p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    if priscus_alerts:
+        st.markdown("#### 👵 PRISCUS 2.0 – Potenziell Inadäquate Medikation im Alter (PIM)")
+        for pim in priscus_alerts:
+            st.markdown(f"""
+            <div class="priscus-card">
+                <span class="status-badge badge-medium">PRISCUS 2.0 PIM</span>
+                <h4 style="margin:8px 0 4px 0; color:#fef08a;">{pim['drug'].capitalize()}</h4>
+                <p style="margin:0 0 4px 0;"><strong>Risiko im Alter:</strong> {pim['risk']}</p>
+                <p style="margin:0 0 4px 0;"><strong>Begründung:</strong> {pim['reason']}</p>
+                <p style="margin:0; color:#fde047;"><strong>Leitlinien-Alternative:</strong> {pim['alternative']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    if renal_alerts:
+        st.markdown("#### 🫘 Nierenfunktions-Warnungen (eGFR-Dosisanpassung)")
+        for ren in renal_alerts:
+            st.markdown(f"""
+            <div class="renal-card">
+                <span class="status-badge badge-high">{ren['severity']}</span>
+                <h4 style="margin:8px 0 4px 0; color:#fed7aa;">{ren['title']}</h4>
+                <p style="margin:0 0 4px 0;">{ren['message']}</p>
+                <p style="margin:0; color:#ffedd5;"><strong>Empfohlene Maßnahme:</strong> {ren['action']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+# ==================== TAB 3: LABOR & EINNAHMEPLAN ====================
+with tab_plan:
+    col_lab, col_sched = st.columns([1, 1])
+
+    with col_lab:
+        st.markdown("#### 🧪 Leitliniengestützte Laborkontrollen")
+        if lab_checklist:
+            for lab in lab_checklist:
+                is_urgent = lab["urgency"] == "Hoch"
+                badge_class = "badge-high" if is_urgent else "badge-organ"
+                st.markdown(f"""
+                <div class="monitoring-card">
+                    <span class="status-badge {badge_class}">{lab['urgency']}e Priorität</span>
+                    <span class="status-badge badge-db">{lab['interval']}</span>
+                    <h4 style="margin:8px 0 4px 0; color:#ffffff;">🔬 {lab['parameter']}</h4>
+                    <p style="margin:0 0 4px 0; font-size:0.88rem; color:#cbd5e1;"><strong>Auslöser:</strong> {', '.join(lab['triggers'])}</p>
+                    <p style="margin:0; font-size:0.85rem; color:#94a3b8;"><strong>Begründung:</strong> {lab['reason']}</p>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.caption("Klicken Sie auf 'Synthese erstellen', um eine 3-sätzige strukturierte Risikobewertung für den Visitenbericht zu generieren.")
+            st.info("Keine spezifischen Laborkontrollen für das aktuelle Wirkstoffprofil erforderlich.")
 
-# --- VIS.JS RADAR PANEL ---
-st.markdown("### 🕸️ Interaktives Interaktions-Radar")
-render_interaction_network(active_substances, detected_interactions, synergies)
+    with col_sched:
+        st.markdown("#### ⏰ Chronopharmakologischer Einnahmeplan")
+        if schedule:
+            for slot, items in schedule.items():
+                st.markdown(f"""
+                <div class="schedule-card">
+                    <h4 style="margin:0 0 6px 0; color:#38bdf8;">🕒 {slot}</h4>
+                    <ul style="margin:0; padding-left:18px;">
+                        {''.join([f'<li style="margin-bottom:3px; font-size:0.92rem;">{it}</li>' for it in items])}
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Keine Medikamente zur Zeitplan-Erstellung ausgewählt.")
 
-st.markdown("---")
+# ==================== TAB 4: DOSSIER & EXPORT ====================
+with tab_export:
+    st.markdown("#### 📥 Klinischer Report & Medikationsdossier")
+    st.write("Generieren Sie einen druckfertigen DIN-A4-Arztbrief oder exportieren Sie den Befund zur Übernahme in Ihr Praxis- oder Apothekenverwaltungssystem.")
 
-# --- MULTIDRUG-SYNERGIEN ---
-if synergies:
-    st.markdown("### ⚡ Multidrug-Synergien (Kombinatorische Risiken)")
-    for syn in synergies:
-        st.markdown(f"""
-        <div class="synergy-card">
-            <span class="status-badge badge-high">{syn['severity']}</span>
-            <span class="status-badge badge-class">{syn['type']}</span>
-            <h4 style="margin:10px 0 6px 0; color:#fff;">{syn['title']}</h4>
-            <p style="margin:0 0 6px 0;"><strong>Beteiligte Substanzen:</strong> {", ".join([s.capitalize() for s in syn['drugs']])}</p>
-            <p style="margin:0 0 6px 0;">{syn['effect']}</p>
-            <p style="margin:0; font-size:0.88rem; color:#fca5a5;"><em>Mechanismus: {syn['mechanism']}</em></p>
-        </div>
-        """, unsafe_allow_html=True)
+    col_btn_pdf, col_btn_txt = st.columns(2)
 
-# --- PRISCUS 2.0 ALERTS ---
-if priscus_alerts:
-    st.markdown("### 👵 PRISCUS 2.0 – Potenziell Inadäquate Medikation (PIM)")
-    for pim in priscus_alerts:
-        st.markdown(f"""
-        <div class="priscus-card">
-            <span class="status-badge badge-medium">PRISCUS 2.0 PIM</span>
-            <h4 style="margin:10px 0 6px 0; color:#fef08a;">{pim['drug'].capitalize()}</h4>
-            <p style="margin:0 0 6px 0;"><strong>Risiko im Alter:</strong> {pim['risk']}</p>
-            <p style="margin:0 0 6px 0;"><strong>Begründung:</strong> {pim['reason']}</p>
-            <p style="margin:0; color:#fde047;"><strong>Leitlinien-Alternative:</strong> {pim['alternative']}</p>
-        </div>
-        """, unsafe_allow_html=True)
+    with col_btn_pdf:
+        try:
+            pdf_bytes = generate_full_clinical_pdf(
+                patient_age=patient_age,
+                egfr_value=egfr_value,
+                active_substances=active_substances,
+                detected_interactions=detected_interactions,
+                synergies=synergies,
+                priscus_alerts=priscus_alerts,
+                renal_alerts=renal_alerts,
+                schedule=schedule,
+                lab_checklist=lab_checklist
+            )
+            st.download_button(
+                label="📄 PDF-Arztbrief herunterladen (DIN-A4)",
+                data=pdf_bytes,
+                file_name=f"medicheck_befund_{patient_age}J_eGFR{egfr_value}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"PDF-Generierungsfehler: {e}")
 
-# --- NIERENRISIKEN (eGFR) ---
-if renal_alerts:
-    st.markdown("### 🫘 Nierenfunktions-Warnungen (eGFR-Dosisanpassung)")
-    for ren in renal_alerts:
-        st.markdown(f"""
-        <div class="renal-card">
-            <span class="status-badge badge-high">{ren['severity']}</span>
-            <h4 style="margin:10px 0 6px 0; color:#fed7aa;">{ren['title']}</h4>
-            <p style="margin:0 0 6px 0;">{ren['message']}</p>
-            <p style="margin:0; color:#ffedd5;"><strong>Empfohlene Maßnahme:</strong> {ren['action']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-# --- PAARWEISE INTERAKTIONEN ---
-st.markdown("### 📑 Dokumentierte Paar-Wechselwirkungen")
-if detected_interactions:
-    for item in detected_interactions:
-        d1, d2 = item["pair"]
-        sev = item.get("severity", "Moderat")
-        is_high = sev == "Hoch"
-        card_class = "high" if is_high else "medium"
-        badge_class = "badge-high" if is_high else "badge-medium"
-
-        st.markdown(f"""
-        <div class="interaction-card {card_class}">
-            <span class="status-badge {badge_class}">{sev}</span>
-            <span class="status-badge badge-organ">{item.get('system', 'Allgemein')}</span>
-            <span class="status-badge badge-db">{item.get('source', 'Lokal verifiziert')}</span>
-            <h4 style="margin:10px 0 6px 0; color:#fff;">{d1.capitalize()} + {d2.capitalize()}</h4>
-            <p style="margin:0 0 8px 0; font-size:0.95rem;">{item.get('effect', '')}</p>
-            {f'<p style="margin:0 0 8px 0; font-size:0.88rem; color:#94a3b8;"><em>Mechanismus: {item["mechanism"]}</em></p>' if item.get("mechanism") else ''}
-            {f'<div class="advice-box">💡 <strong>Handlungsempfehlung:</strong> {item["advice"]}</div>' if item.get("advice") else ''}
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.info("Keine paarweisen Wechselwirkungen zwischen den ausgewählten Wirkstoffen dokumentiert.")
-
-# --- LABORMONITORING CHECKLISTE ---
-if lab_checklist:
-    st.markdown("### 🧪 Leitliniengestützte Labormonitoring-Empfehlungen")
-    for lab in lab_checklist:
-        is_urgent = lab["urgency"] == "Hoch"
-        badge_class = "badge-high" if is_urgent else "badge-organ"
-        st.markdown(f"""
-        <div class="monitoring-card">
-            <span class="status-badge {badge_class}">{lab['urgency']}e Priorität</span>
-            <span class="status-badge badge-db">Intervall: {lab['interval']}</span>
-            <h4 style="margin:8px 0 6px 0; color:#ffffff;">🔬 {lab['parameter']}</h4>
-            <p style="margin:0 0 6px 0; font-size:0.92rem; color:#cbd5e1;"><strong>Indikation / Auslöser:</strong> {', '.join(lab['triggers'])}</p>
-            <p style="margin:0; font-size:0.90rem; color:#94a3b8;"><strong>Klinische Begründung:</strong> {lab['reason']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-# --- CHRONOPHARMAKOLOGISCHER EINNAHMEPLAN ---
-st.markdown("### ⏰ Chronopharmakologischer Einnahmezeitplan")
-if schedule:
-    for slot, items in schedule.items():
-        st.markdown(f"""
-        <div class="schedule-card">
-            <h4 style="margin:0 0 8px 0; color:#38bdf8;">🕒 {slot}</h4>
-            <ul style="margin:0; padding-left:20px;">
-                {''.join([f'<li style="margin-bottom:4px;">{it}</li>' for it in items])}
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.write("Keine Medikamente zur Zeitplan-Erstellung ausgewählt.")
-
-# --- EXPORT & REPORTING ---
-st.markdown("---")
-st.markdown("### 📥 Medikationsdossier & Export")
-
-
-def generate_pdf_report():
-    return generate_full_clinical_pdf(
-        patient_age=patient_age,
-        egfr_value=egfr_value,
-        active_substances=active_substances,
-        detected_interactions=detected_interactions,
-        synergies=synergies,
-        priscus_alerts=priscus_alerts,
-        renal_alerts=renal_alerts,
-        schedule=schedule,
-        lab_checklist=lab_checklist
-    )
-
-
-col_exp1, col_exp2 = st.columns(2)
-with col_exp1:
-    try:
-        pdf_bytes = generate_pdf_report()
+    with col_btn_txt:
+        summary_text = (
+            f"MediCheck AMTS-Befund\n"
+            f"Patient: {patient_age} Jahre | eGFR: {egfr_value} ml/min\n"
+            f"Wirkstoffe ({len(active_substances)}): {', '.join([s.capitalize() for s in active_substances])}\n"
+            f"Interaktionen: {len(detected_interactions)} | Synergien: {len(synergies)} | PIM: {len(priscus_alerts)}\n\n"
+            f"Befundübersicht:\n"
+            + "\n".join([f"- [{i.get('severity')}] {i['pair'][0].capitalize()} + {i['pair'][1].capitalize()}: {i.get('effect')}" for i in detected_interactions])
+        )
         st.download_button(
-            label="📄 PDF-Arztbrief herunterladen",
-            data=bytes(pdf_bytes),
-            file_name="medicheck_interaktionsbericht.pdf",
-            mime="application/pdf",
+            label="📋 Text-Befund kopieren / exportieren",
+            data=summary_text,
+            file_name="medicheck_befund.txt",
+            mime="text/plain",
             use_container_width=True
         )
-    except Exception as e:
-        st.warning(f"PDF-Generierung vorübergehend nicht verfügbar: {e}")
-
-with col_exp2:
-    summary_text = f"MediCheck Befund:\nPatient: {patient_age} J., eGFR: {egfr_value}\nSubstanzen: {', '.join(active_substances)}\nInteraktionen: {len(detected_interactions)}\nSynergien: {len(synergies)}\nPIM: {len(priscus_alerts)}"
-    st.download_button(
-        label="📋 Text-Zusammenfassung kopieren",
-        data=summary_text,
-        file_name="medicheck_befund.txt",
-        mime="text/plain",
-        use_container_width=True
-    )
 
 st.markdown("""
 <div class="disclaimer-box">
     <strong>Haftungsausschluss & Medizinischer Hinweis:</strong> MediCheck dient der softwaregestützten Entscheidungsunterstützung (Clinical Decision Support) für medizinisches Fachpersonal und ersetzt keine ärztliche oder apothekerliche Begutachtung. Alle Angaben ohne Gewähr.
 </div>
 """, unsafe_allow_html=True)
-
-st.sidebar.markdown("---")
-with st.sidebar.expander("⚖️ Rechtliches & Datenschutz"):
-    st.markdown("""
-    **Haftungsausschluss:** MediCheck ist ein rein wissenschaftliches Informations- und Recherchewerkzeug zur Entscheidungsunterstützung. Es ist **kein** zertifiziertes Medizinprodukt im Sinne der EU-MDR.
-
-    **Datenschutz (DSGVO):** Es werden keinerlei personenbezogene Daten, Patientennamen oder Behandlungsakten erhoben oder auf Servern gespeichert. Die Analyse erfolgt zustandslos im Arbeitsspeicher.
-
-    **Kontakt:** Cihan Baydaroglu, Berlin
-    """)
