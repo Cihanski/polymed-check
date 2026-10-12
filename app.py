@@ -1,6 +1,7 @@
 import os
 import json
 import itertools
+from ai_pipeline import generate_clinical_summary
 import streamlit as st
 import streamlit.components.v1 as components
 from fpdf import FPDF
@@ -694,6 +695,28 @@ with col4:
     </div>
     """, unsafe_allow_html=True)
 
+# --- KI-KLINISCHE KURZSYNTHESE ---
+with st.expander("🤖 KI-Klinische Kurzsynthese (Arzt-Briefing)", expanded=True):
+    col_ai_btn, col_ai_txt = st.columns([1, 4])
+    with col_ai_btn:
+        generate_ai = st.button("Synthese erstellen", use_container_width=True)
+    with col_ai_txt:
+        if generate_ai or "ai_narrative" in st.session_state:
+            if generate_ai:
+                with st.spinner("Pharmakologische Gesamtsynthese wird erstellt..."):
+                    st.session_state["ai_narrative"] = generate_clinical_summary(
+                        patient_age=patient_age,
+                        egfr_value=egfr_value,
+                        active_substances=active_substances,
+                        detected_interactions=detected_interactions,
+                        synergies=synergies,
+                        priscus_alerts=priscus_alerts,
+                        renal_alerts=renal_alerts
+                    )
+            st.info(st.session_state.get("ai_narrative", ""))
+        else:
+            st.caption("Klicken Sie auf 'Synthese erstellen', um eine 3-sätzige strukturierte Risikobewertung für den Visitenbericht zu generieren.")
+
 # --- VIS.JS RADAR PANEL ---
 st.markdown("### 🕸️ Interaktives Interaktions-Radar")
 render_interaction_network(active_substances, detected_interactions, synergies)
@@ -845,3 +868,13 @@ st.markdown("""
     <strong>Haftungsausschluss & Medizinischer Hinweis:</strong> MediCheck dient der softwaregestützten Entscheidungsunterstützung (Clinical Decision Support) für medizinisches Fachpersonal und ersetzt keine ärztliche oder apothekerliche Begutachtung. Alle Angaben ohne Gewähr.
 </div>
 """, unsafe_allow_html=True)
+
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚖️ Rechtliches & Datenschutz"):
+    st.markdown("""
+    **Haftungsausschluss:** MediCheck ist ein rein wissenschaftliches Informations- und Recherchewerkzeug zur Entscheidungsunterstützung. Es ist **kein** zertifiziertes Medizinprodukt im Sinne der EU-MDR.
+
+    **Datenschutz (DSGVO):** Es werden keinerlei personenbezogene Daten, Patientennamen oder Behandlungsakten erhoben oder auf Servern gespeichert. Die Analyse erfolgt zustandslos im Arbeitsspeicher.
+
+    **Kontakt:** Cihan Baydaroglu, Berlin
+    """)
